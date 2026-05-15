@@ -43,3 +43,7 @@ next-env.d.ts
 
 # cloned subfolder (git subdir in use)
 /apk_FP_notas/
+
+# Excel files
+*.xlsx
+*.xls
