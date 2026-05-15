@@ -1,6 +1,7 @@
 package com.apkesonotas;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -29,7 +30,21 @@ public class ExcelFilePlugin extends Plugin {
 
   @PluginMethod
   public void selectFile(PluginCall call) {
-    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    Intent intent = buildFileIntent(Intent.ACTION_OPEN_DOCUMENT);
+    try {
+      startActivityForResult(call, intent, "selectFileResult");
+    } catch (ActivityNotFoundException ex) {
+      Intent fallback = buildFileIntent(Intent.ACTION_GET_CONTENT);
+      try {
+        startActivityForResult(call, fallback, "selectFileResult");
+      } catch (ActivityNotFoundException fallbackEx) {
+        call.reject("BlueStacks/Android no tiene un selector de archivos disponible.", fallbackEx);
+      }
+    }
+  }
+
+  private Intent buildFileIntent(String action) {
+    Intent intent = new Intent(action);
     intent.addCategory(Intent.CATEGORY_OPENABLE);
     intent.setType("*/*");
     intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
@@ -40,7 +55,7 @@ public class ExcelFilePlugin extends Plugin {
     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
     intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
     intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-    startActivityForResult(call, intent, "selectFileResult");
+    return intent;
   }
 
   @ActivityCallback

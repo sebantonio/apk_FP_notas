@@ -638,32 +638,7 @@
     return result;
   }
 
-  function _openFilePicker() {
-    const nativeExcel = _nativeExcel();
-    if (nativeExcel && typeof nativeExcel.selectFile === "function") {
-      return nativeExcel.selectFile().then(async (record) => {
-        if (!record || record.cancelled || !record.uri) return null;
-        _sourceBuffer = await _readNativeBuffer(record);
-        if (!_sourceBuffer) return null;
-        _workbook = null;
-        _clearRowsCache();
-        _pendingPatches = [];
-        _activityMeta = {};
-        _fileName = record.fileName || "archivo.xlsx";
-        _fileUri = record.uri || null;
-        localStorage.setItem(FILE_KEY, _fileName);
-        if (_fileUri) localStorage.setItem(URI_KEY, _fileUri);
-        localStorage.removeItem(LEGACY_DATA_KEY);
-        await _dbSavePatches([]);
-        await _dbSaveSheets({});
-        await _dbSaveActivityMeta({});
-        return { fileName: _fileName, filePath: _fileUri || _fileName };
-      }).catch((err) => {
-        console.error("No se pudo leer el Excel seleccionado.", err);
-        return null;
-      });
-    }
-
+  function _openWebFilePicker() {
     return new Promise((resolve) => {
       const input = document.createElement("input");
       input.type = "file";
@@ -727,6 +702,35 @@
 
       input.click();
     });
+  }
+
+  function _openFilePicker() {
+    const nativeExcel = _nativeExcel();
+    if (nativeExcel && typeof nativeExcel.selectFile === "function") {
+      return nativeExcel.selectFile().then(async (record) => {
+        if (!record || record.cancelled || !record.uri) return null;
+        _sourceBuffer = await _readNativeBuffer(record);
+        if (!_sourceBuffer) return null;
+        _workbook = null;
+        _clearRowsCache();
+        _pendingPatches = [];
+        _activityMeta = {};
+        _fileName = record.fileName || "archivo.xlsx";
+        _fileUri = record.uri || null;
+        localStorage.setItem(FILE_KEY, _fileName);
+        if (_fileUri) localStorage.setItem(URI_KEY, _fileUri);
+        localStorage.removeItem(LEGACY_DATA_KEY);
+        await _dbSavePatches([]);
+        await _dbSaveSheets({});
+        await _dbSaveActivityMeta({});
+        return { fileName: _fileName, filePath: _fileUri || _fileName };
+      }).catch((err) => {
+        console.error("No se pudo leer el Excel seleccionado.", err);
+        return _openWebFilePicker();
+      });
+    }
+
+    return _openWebFilePicker();
   }
 
   function _getAlumnos() {
