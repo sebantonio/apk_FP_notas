@@ -685,7 +685,10 @@
                     return;
                 }
 
-                mostrarAlumnosLocales(result);
+                const alumnosResult = typeof window.electronExcel.getAlumnos === 'function'
+                    ? await window.electronExcel.getAlumnos()
+                    : result;
+                mostrarAlumnosLocales(alumnosResult);
                 mostrarLoading(false);
             } catch (error) {
                 mostrarMensaje('Error al abrir el Excel local: ' + error.message, 'error');

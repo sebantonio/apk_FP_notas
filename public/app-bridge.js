@@ -43,6 +43,7 @@
   const DB_KEY = "selected_file";
 
   let _workbook = null;
+  let _sourceBuffer = null;
   let _fileName = localStorage.getItem(FILE_KEY) || null;
   let _loadPromise = null;
   let _rowsCache = new Map();
@@ -94,7 +95,7 @@
     try {
       const bin = atob(b64);
       const buf = Uint8Array.from(bin, c => c.charCodeAt(0));
-      _workbook = XLSX.read(buf, { type: "array", cellDates: true });
+      _sourceBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
       _clearRowsCache();
       localStorage.removeItem(LEGACY_DATA_KEY);
       return true;
@@ -105,13 +106,13 @@
   }
 
   async function _loadFromDb() {
-    if (_workbook) return true;
+    if (_sourceBuffer || _workbook) return true;
     try {
       const record = await _dbGet();
       if (!record || !record.buffer) return false;
       _fileName = record.fileName || _fileName;
       if (_fileName) localStorage.setItem(FILE_KEY, _fileName);
-      _workbook = XLSX.read(new Uint8Array(record.buffer), { type: "array", cellDates: true });
+      _sourceBuffer = record.buffer;
       _clearRowsCache();
       return true;
     } catch (err) {
@@ -122,14 +123,34 @@
 
   async function _ensureWorkbook() {
     if (_workbook) return _workbook;
-    if (_loadLegacyStorage()) return _workbook;
+    if (!_sourceBuffer && _loadLegacyStorage()) {
+      // legacy data is now available as a source buffer
+    }
+    if (!_sourceBuffer) {
+      if (!_loadPromise) {
+        _loadPromise = _loadFromDb().finally(() => {
+          _loadPromise = null;
+        });
+      }
+      await _loadPromise;
+    }
+    if (!_workbook && _sourceBuffer) {
+      _workbook = XLSX.read(new Uint8Array(_sourceBuffer), { type: "array", cellDates: true });
+      _clearRowsCache();
+    }
+    return _workbook;
+  }
+
+  async function _ensureSourceBuffer() {
+    if (_sourceBuffer) return _sourceBuffer;
+    if (_loadLegacyStorage()) return _sourceBuffer;
     if (!_loadPromise) {
       _loadPromise = _loadFromDb().finally(() => {
         _loadPromise = null;
       });
     }
     await _loadPromise;
-    return _workbook;
+    return _sourceBuffer;
   }
 
   function _wb() {
@@ -141,6 +162,16 @@
     const wb = _wb();
     if (!wb.SheetNames.includes(name)) throw new Error(`Hoja "${name}" no encontrada.`);
     return wb.Sheets[name];
+  }
+
+  function _readPartialWorkbook(sheetNames) {
+    if (!_sourceBuffer) return _workbook;
+    const sheets = Array.isArray(sheetNames) ? sheetNames : [sheetNames];
+    return XLSX.read(new Uint8Array(_sourceBuffer), {
+      type: "array",
+      cellDates: true,
+      sheets,
+    });
   }
 
   function _sheetToJson(name, opts = {}) {
@@ -157,7 +188,9 @@
 
   function _rows(name) {
     if (!_rowsCache.has(name)) {
-      _rowsCache.set(name, XLSX.utils.sheet_to_json(_sheet(name), { header: 1, defval: "" }));
+      const wb = _workbook || _readPartialWorkbook(name);
+      if (!wb || !wb.Sheets || !wb.Sheets[name]) throw new Error(`Hoja "${name}" no encontrada.`);
+      _rowsCache.set(name, XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "" }));
     }
     return _rowsCache.get(name);
   }
@@ -228,13 +261,14 @@
         }
         try {
           const buffer = await file.arrayBuffer();
-          _workbook = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
+          _sourceBuffer = buffer;
+          _workbook = null;
           _clearRowsCache();
           _fileName = file.name;
           localStorage.setItem(FILE_KEY, _fileName);
           localStorage.removeItem(LEGACY_DATA_KEY);
           await _dbSet({ fileName: _fileName, buffer });
-          resolve(_buildResult());
+          resolve({ fileName: _fileName, filePath: _fileName });
         } catch (err) {
           console.error("No se pudo leer el Excel seleccionado.", err);
           resolve(null);
@@ -638,16 +672,20 @@
 
   window.electronExcel = {
     selectFile: () => _openFilePicker(),
-    getSelectedFile: async () => (_fileName && await _ensureWorkbook()) ? _buildResult() : null,
-    setSelectedFile: async (filePath) => (_fileName === filePath && await _ensureWorkbook()) ? _buildResult() : null,
+    getSelectedFile: async () => (_fileName && await _ensureSourceBuffer())
+      ? { fileName: _fileName, filePath: _fileName }
+      : null,
+    setSelectedFile: async (filePath) => (_fileName === filePath && await _ensureSourceBuffer())
+      ? { fileName: _fileName, filePath: _fileName }
+      : null,
     verifyFileExists: async () => !!_workbook || !!(await _dbGet()),
 
     getUnidades: async () => {
-      await _ensureWorkbook();
+      await _ensureSourceBuffer();
       return { fileName: _fileName, filePath: _fileName, unidades: _getUnidades() };
     },
     getAlumnos: async () => {
-      await _ensureWorkbook();
+      await _ensureSourceBuffer();
       return { fileName: _fileName, filePath: _fileName, alumnos: _getAlumnos() };
     },
     saveUnidades: async (unidades) => {
@@ -659,7 +697,7 @@
     },
 
     getRraaCriterios: async () => {
-      await _ensureWorkbook();
+      await _ensureSourceBuffer();
       return _getRraaCriterios();
     },
     saveRraaCriterios: async (payloadOrRraa, criterios, ponderacionesUnidad = []) => {
