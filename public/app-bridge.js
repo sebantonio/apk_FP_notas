@@ -42,6 +42,7 @@
   const DB_STORE = "excel";
   const DB_KEY = "selected_file";
   const DB_PATCHES_KEY = "cell_patches";
+  const DB_ACTIVITY_META_KEY = "activity_meta";
 
   let _workbook = null;
   let _sourceBuffer = null;
@@ -49,6 +50,7 @@
   let _loadPromise = null;
   let _rowsCache = new Map();
   let _pendingPatches = [];
+  let _activityMeta = null;
 
   function _openDb() {
     return new Promise((resolve, reject) => {
@@ -380,6 +382,55 @@
     } catch { }
   }
 
+  async function _dbGetActivityMeta() {
+    try {
+      const db = await _openDb();
+      return new Promise((resolve) => {
+        const tx = db.transaction(DB_STORE, "readonly");
+        const req = tx.objectStore(DB_STORE).get(DB_ACTIVITY_META_KEY);
+        req.onsuccess = () => { db.close(); resolve(req.result || {}); };
+        req.onerror = () => { db.close(); resolve({}); };
+      });
+    } catch { return {}; }
+  }
+
+  async function _dbSaveActivityMeta(meta) {
+    try {
+      const db = await _openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, "readwrite");
+        tx.objectStore(DB_STORE).put(meta || {}, DB_ACTIVITY_META_KEY);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+    } catch {}
+  }
+
+  async function _ensureActivityMeta() {
+    if (_activityMeta) return _activityMeta;
+    _activityMeta = await _dbGetActivityMeta();
+    return _activityMeta;
+  }
+
+  function _activityMetaKey(sheetName, tipo, numero) {
+    return `${sheetName}|${tipo}|${Number(numero)}`;
+  }
+
+  async function _saveActivityMeta(sheetName, tipo, numero, data) {
+    const meta = await _ensureActivityMeta();
+    const key = _activityMetaKey(sheetName, tipo, numero);
+    meta[key] = { ...(meta[key] || {}), ...data };
+    await _dbSaveActivityMeta(meta);
+  }
+
+  function _applyActivityMeta(sheetName, tipo, actividades) {
+    const meta = _activityMeta || {};
+    return (actividades || []).map((item) => {
+      const saved = meta[_activityMetaKey(sheetName, tipo, item.numero)];
+      return saved ? { ...item, ...saved } : item;
+    });
+  }
+
   function _applyPatchesToWorkbook(patches) {
     if (!_workbook || !patches || !patches.length) return;
     const sheetsModified = new Set();
@@ -452,10 +503,6 @@
     if (!_workbook || !_fileName) return;
     if (_isAndroid()) {
       await _flushPatchesAndroid();
-      const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
-      const buffer = new Uint8Array(wbout).buffer;
-      _sourceBuffer = buffer;
-      await _dbSet({ fileName: _fileName, buffer });
       return;
     }
     const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
@@ -529,12 +576,14 @@
           _workbook = null;
           _clearRowsCache();
           _pendingPatches = [];
+          _activityMeta = {};
           _fileName = file.name;
           localStorage.setItem(FILE_KEY, _fileName);
           localStorage.removeItem(LEGACY_DATA_KEY);
           await _dbSet({ fileName: _fileName, buffer });
           await _dbSavePatches([]);
           await _dbSaveSheets({});
+          await _dbSaveActivityMeta({});
           resolve({ fileName: _fileName, filePath: _fileName });
         } catch (err) {
           console.error("No se pudo leer el Excel seleccionado.", err);
@@ -910,7 +959,11 @@
         if (layout && layout.tipoColMap[definition.key] !== undefined) {
           const colIdx = layout.tipoColMap[definition.key];
           const blocks = _getActivityBlocks(layout.rows, colIdx, layout.primeraFilaBloque, layout.alturaBloque);
-          actividades = blocks.map((b) => ({ numero: b.numero, nombre: b.nombre, incluida: b.incluida }));
+          actividades = _applyActivityMeta(
+            layout.sheetName,
+            definition.key,
+            blocks.map((b) => ({ numero: b.numero, nombre: b.nombre, incluida: b.incluida }))
+          );
         } else {
           // Intentar hoja separada
           const splitSheet = _activitySheetName(unidad, definition.key);
@@ -925,6 +978,7 @@
               return match ? { numero: Number(match[1]), nombre: "", incluida: true } : null;
             })
             .filter(Boolean);
+          actividades = _applyActivityMeta(splitSheet, definition.key, actividades);
         }
       } catch {
         actividades = [];
@@ -980,6 +1034,10 @@
     });
     _clearRowsCache(hoja);
     await _downloadWorkbook();
+    await _saveActivityMeta(hoja, tipo, actividad, {
+      ...(nombreActividad !== undefined ? { nombre: String(nombreActividad) } : {}),
+      ...(incluida !== undefined ? { incluida: Boolean(incluida) } : {}),
+    });
     return { ok: true };
   }
 
@@ -1037,11 +1095,13 @@
     getNotasActividad: async (payload) => {
       if (payload && payload.includeRraa === false && !_isAndroid()) await _ensureSourceBuffer();
       else await _ensureWorkbook();
+      await _ensureActivityMeta();
       return _getNotasActividad(payload);
     },
     getNotasActividadesTipo: async ({ unidad, tipo }) => {
       if (_isAndroid()) await _ensureWorkbook();
       else await _ensureSourceBuffer();
+      await _ensureActivityMeta();
       const tipos = _getTiposActividad(unidad);
       const type = tipos.find(item => item.key === tipo) || tipos[0];
       const actividades = type ? type.actividades : [];
@@ -1057,6 +1117,7 @@
     },
     saveNotasActividad: async (payload) => {
       await _ensureWorkbook();
+      await _ensureActivityMeta();
       await _saveNotasActividad(payload);
       const result = _getNotasActividad(payload);
       return result;
@@ -1074,6 +1135,7 @@
 
     addActividad: async (payload) => {
       const wb = await _ensureWorkbook();
+      await _ensureActivityMeta();
       if (!wb) throw new Error("Sin archivo");
       const layout = _detectActivityLayout(payload.unidad);
       const hoja = layout.sheetName;
@@ -1144,6 +1206,10 @@
 
       _clearRowsCache(hoja);
       await _downloadWorkbook();
+      await _saveActivityMeta(hoja, payload.tipo, numero, {
+        nombre: payload.nombreActividad || "",
+        incluida: payload.incluida !== false,
+      });
       return _getNotasActividad({ unidad: payload.unidad, tipo: payload.tipo, actividad: numero, includeRraa: false });
     },
 
