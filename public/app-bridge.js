@@ -256,7 +256,7 @@
 
       const numRow = rows[filaInicio + 1] || [];
       const numero = Number(numRow[tipoColIdx + 1]) || (blocks.length + 1);
-      const nombre = String(numRow[tipoColIdx + 2] || ""); // columna NOMBRE
+      const nombre = String(numRow[tipoColIdx + 3] || ""); // col: N° | num | NOMBRE | <nombre real>
 
       const inclRow = rows[filaInicio + 2] || [];
       const inclCell = String(inclRow[tipoColIdx + 1] || "").toUpperCase().trim();
@@ -811,9 +811,9 @@
     const block = blocks.find((b) => Number(b.numero) === Number(actividad));
     if (!block) throw new Error(`Actividad ${actividad} no encontrada en ${hoja}`);
 
-    // Guardar nombre en fila N° col NOMBRE (colIdx+2)
+    // Guardar nombre en fila N° col <nombre real> (colIdx+3: N° | num | NOMBRE | <nombre real>)
     if (nombreActividad !== undefined) {
-      const nombreCell = XLSX.utils.encode_cell({ r: block.filaInicio + 1, c: colIdx + 2 });
+      const nombreCell = XLSX.utils.encode_cell({ r: block.filaInicio + 1, c: colIdx + 3 });
       ws[nombreCell] = { v: String(nombreActividad), t: "s" };
     }
     // Guardar incluida en fila INCLUIDO col colIdx+1
