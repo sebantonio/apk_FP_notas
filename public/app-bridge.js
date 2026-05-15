@@ -140,6 +140,16 @@
       _workbook = XLSX.read(new Uint8Array(_sourceBuffer), { type: "array", cellDates: true });
       _clearRowsCache();
       if (_isAndroid()) {
+        // Restaurar hojas guardadas individualmente (más fiable que patches)
+        const savedSheets = await _dbGetSheets();
+        for (const [sheetName, buffer] of Object.entries(savedSheets || {})) {
+          try {
+            const miniWb = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
+            _workbook.Sheets[sheetName] = miniWb.Sheets[sheetName];
+            _clearRowsCache(sheetName);
+          } catch {}
+        }
+        // Aplicar también patches por si acaso
         const patches = await _dbGetPatches();
         if (patches && patches.length) _applyPatchesToWorkbook(patches);
       }
@@ -379,18 +389,54 @@
     _pendingPatches.push({ sheet, r, c, v, ts: Date.now() });
   }
 
+  const DB_SHEETS_KEY = "modified_sheets";
+
+  async function _dbGetSheets() {
+    try {
+      const db = await _openDb();
+      return new Promise((resolve) => {
+        const tx = db.transaction(DB_STORE, "readonly");
+        const req = tx.objectStore(DB_STORE).get(DB_SHEETS_KEY);
+        req.onsuccess = () => { db.close(); resolve(req.result || {}); };
+        req.onerror = () => { db.close(); resolve({}); };
+      });
+    } catch { return {}; }
+  }
+
+  async function _dbSaveSheets(sheets) {
+    try {
+      const db = await _openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, "readwrite");
+        tx.objectStore(DB_STORE).put(sheets, DB_SHEETS_KEY);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+    } catch { }
+  }
+
   async function _flushPatchesAndroid() {
     if (!_pendingPatches.length) return;
-    const existing = await _dbGetPatches();
-    const merged = [...existing, ..._pendingPatches];
-    await _dbSavePatches(merged);
+    // Guardar cada hoja modificada completa (solo esa hoja, no el workbook entero)
+    const sheetNames = [...new Set(_pendingPatches.map(p => p.sheet))];
+    const existing = await _dbGetSheets();
+    for (const sheetName of sheetNames) {
+      const ws = _workbook && _workbook.Sheets[sheetName];
+      if (!ws) continue;
+      const miniWb = { SheetNames: [sheetName], Sheets: { [sheetName]: ws } };
+      const out = XLSX.write(miniWb, { bookType: "xlsx", type: "array" });
+      existing[sheetName] = new Uint8Array(out).buffer;
+    }
+    await _dbSaveSheets(existing);
+    // También guardar patches para compatibilidad
+    const existingPatches = await _dbGetPatches();
+    await _dbSavePatches([...existingPatches, ..._pendingPatches]);
     _pendingPatches = [];
   }
 
   async function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
     if (_isAndroid()) {
-      // En Android: guardar patches en IndexedDB, sin reserializar el workbook completo.
       await _flushPatchesAndroid();
       return;
     }
@@ -470,6 +516,7 @@
           localStorage.removeItem(LEGACY_DATA_KEY);
           await _dbSet({ fileName: _fileName, buffer });
           await _dbSavePatches([]);
+          await _dbSaveSheets({});
           resolve({ fileName: _fileName, filePath: _fileName });
         } catch (err) {
           console.error("No se pudo leer el Excel seleccionado.", err);
