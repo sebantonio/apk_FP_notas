@@ -272,7 +272,8 @@
 
       const numRow = rows[filaInicio + 1] || [];
       const numero = Number(numRow[tipoColIdx + 1]) || (blocks.length + 1);
-      const nombre = String(numRow[tipoColIdx + 3] || ""); // col: N° | num | NOMBRE | <nombre real>
+      const nombreOffset = _activityNameColOffset(rows, filaInicio, tipoColIdx);
+      const nombre = String(numRow[tipoColIdx + nombreOffset] || "");
 
       const inclRow = rows[filaInicio + 2] || [];
       const inclCell = String(inclRow[tipoColIdx + 1] || "").toUpperCase().trim();
@@ -281,6 +282,19 @@
       blocks.push({ numero, nombre, incluida, filaInicio });
     }
     return blocks;
+  }
+
+  function _activityNameColOffset(rows, filaInicio, tipoColIdx) {
+    let nombreColOffset = 3;
+    const numRow = rows[filaInicio + 1] || [];
+    for (let ci = tipoColIdx; ci < Math.min(numRow.length, tipoColIdx + 10); ci++) {
+      const cell = String(numRow[ci] || "").toUpperCase().trim();
+      if (cell === "NOMBRE" || cell === "NOMBRE ACTIVIDAD" || cell === "ACT." || cell === "ACTIVIDAD") {
+        nombreColOffset = ci - tipoColIdx + 1;
+        break;
+      }
+    }
+    return nombreColOffset;
   }
 
   function _activitySheetRows(unidad, tipo) {
@@ -945,19 +959,9 @@
       if (_isAndroid()) _recordPatch(hoja, r, c, v);
     }
 
-    // Detectar offset real del nombre buscando la columna tras "NOMBRE" o similar
-    let nombreColOffset = 3; // default
-    const numRow = layout.rows[block.filaInicio + 1] || [];
-    for (let ci = colIdx; ci < Math.min(numRow.length, colIdx + 10); ci++) {
-      const cell = String(numRow[ci] || "").toUpperCase().trim();
-      if (cell === "NOMBRE" || cell === "NOMBRE ACTIVIDAD" || cell === "ACT." || cell === "ACTIVIDAD") {
-        nombreColOffset = ci - colIdx + 1;
-        break;
-      }
-    }
+    const nombreColOffset = _activityNameColOffset(layout.rows, block.filaInicio, colIdx);
     if (nombreActividad !== undefined) {
       _writeAndRecord(block.filaInicio + 1, colIdx + nombreColOffset, String(nombreActividad));
-      console.log(`[DEBUG] nombre="${nombreActividad}" offset=${nombreColOffset} fila=${block.filaInicio + 1} col=${colIdx + nombreColOffset} numRow=${JSON.stringify(numRow.slice(colIdx, colIdx+8))}`);
     }
     // Guardar incluida en fila INCLUIDO col colIdx+1
     if (incluida !== undefined) {
@@ -972,12 +976,7 @@
     });
     _clearRowsCache(hoja);
     await _downloadWorkbook();
-    const verifyRow = layout.rows[block.filaInicio + 1] || [];
-    // Re-leer la celda directamente del sheet tras escribir
-    const ws2 = _sheet(hoja);
-    const writtenCell = ws2[XLSX.utils.encode_cell({ r: block.filaInicio + 1, c: colIdx + nombreColOffset })];
-    const writtenVal = writtenCell ? writtenCell.v : "(celda vacía)";
-    return { ok: true, _debug: `off=${nombreColOffset} col=${colIdx+nombreColOffset} written="${writtenVal}" row=${JSON.stringify(numRow.slice(colIdx,colIdx+8))}` };
+    return { ok: true };
   }
 
   window.electronExcel = {
@@ -1032,12 +1031,13 @@
     },
 
     getNotasActividad: async (payload) => {
-      if (payload && payload.includeRraa === false) await _ensureSourceBuffer();
+      if (payload && payload.includeRraa === false && !_isAndroid()) await _ensureSourceBuffer();
       else await _ensureWorkbook();
       return _getNotasActividad(payload);
     },
     getNotasActividadesTipo: async ({ unidad, tipo }) => {
-      await _ensureSourceBuffer();
+      if (_isAndroid()) await _ensureWorkbook();
+      else await _ensureSourceBuffer();
       const tipos = _getTiposActividad(unidad);
       const type = tipos.find(item => item.key === tipo) || tipos[0];
       const actividades = type ? type.actividades : [];
@@ -1053,9 +1053,8 @@
     },
     saveNotasActividad: async (payload) => {
       await _ensureWorkbook();
-      const dbgInfo = await _saveNotasActividad(payload);
+      await _saveNotasActividad(payload);
       const result = _getNotasActividad(payload);
-      result._debug = dbgInfo._debug || "";
       return result;
     },
 
@@ -1107,6 +1106,7 @@
         } else {
           ws[cellRef] = { v: String(v), t: "s" };
         }
+        if (_isAndroid()) _recordPatch(hoja, r, c, v);
       }
 
       // Copiar estructura del bloque plantilla al nuevo lugar
@@ -1120,6 +1120,9 @@
 
       // Actualizar N° con el nuevo número
       _writeCell(ws, nuevaFilaInicio + 1, colIdx + 1, numero);
+      // Actualizar nombre de actividad
+      const nombreColOffset = _activityNameColOffset(layout.rows, plantilla.filaInicio, colIdx);
+      _writeCell(ws, nuevaFilaInicio + 1, colIdx + nombreColOffset, payload.nombreActividad || "");
       // Actualizar INCLUIDO
       _writeCell(ws, nuevaFilaInicio + 2, colIdx + 1, payload.incluida !== false ? "x" : "");
       // Limpiar notas de alumnos
