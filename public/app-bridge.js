@@ -44,6 +44,8 @@
   const DB_KEY = "selected_file";
   const DB_PATCHES_KEY = "cell_patches";
   const DB_ACTIVITY_META_KEY = "activity_meta";
+  const LS_PATCHES_KEY = "android_cell_patches";
+  const LS_ACTIVITY_META_KEY = "android_activity_meta";
 
   let _workbook = null;
   let _sourceBuffer = null;
@@ -460,18 +462,27 @@
   }
 
   async function _dbGetPatches() {
+    let stored = [];
     try {
       const db = await _openDb();
-      return new Promise((resolve) => {
+      stored = await new Promise((resolve) => {
         const tx = db.transaction(DB_STORE, "readonly");
         const req = tx.objectStore(DB_STORE).get(DB_PATCHES_KEY);
         req.onsuccess = () => { db.close(); resolve(req.result || []); };
         req.onerror = () => { db.close(); resolve([]); };
       });
-    } catch { return []; }
+    } catch {}
+    try {
+      const backup = JSON.parse(localStorage.getItem(LS_PATCHES_KEY) || "[]");
+      if (backup.length > stored.length) return backup;
+    } catch {}
+    return stored;
   }
 
   async function _dbSavePatches(patches) {
+    try {
+      localStorage.setItem(LS_PATCHES_KEY, JSON.stringify(patches || []));
+    } catch {}
     try {
       const db = await _openDb();
       return new Promise((resolve, reject) => {
@@ -484,18 +495,27 @@
   }
 
   async function _dbGetActivityMeta() {
+    let stored = {};
     try {
       const db = await _openDb();
-      return new Promise((resolve) => {
+      stored = await new Promise((resolve) => {
         const tx = db.transaction(DB_STORE, "readonly");
         const req = tx.objectStore(DB_STORE).get(DB_ACTIVITY_META_KEY);
         req.onsuccess = () => { db.close(); resolve(req.result || {}); };
         req.onerror = () => { db.close(); resolve({}); };
       });
-    } catch { return {}; }
+    } catch {}
+    try {
+      return { ...JSON.parse(localStorage.getItem(LS_ACTIVITY_META_KEY) || "{}"), ...stored };
+    } catch {
+      return stored;
+    }
   }
 
   async function _dbSaveActivityMeta(meta) {
+    try {
+      localStorage.setItem(LS_ACTIVITY_META_KEY, JSON.stringify(meta || {}));
+    } catch {}
     try {
       const db = await _openDb();
       return new Promise((resolve, reject) => {
@@ -556,7 +576,16 @@
   }
 
   function _recordPatch(sheet, r, c, v) {
-    _pendingPatches.push({ sheet, r, c, v, ts: Date.now() });
+    const patch = { sheet, r, c, v, ts: Date.now() };
+    _pendingPatches.push(patch);
+    try {
+      const existing = JSON.parse(localStorage.getItem(LS_PATCHES_KEY) || "[]");
+      const latest = new Map();
+      for (const item of [...existing, patch]) {
+        latest.set(`${item.sheet}|${item.r}|${item.c}`, item);
+      }
+      localStorage.setItem(LS_PATCHES_KEY, JSON.stringify([...latest.values()]));
+    } catch {}
   }
 
   const DB_SHEETS_KEY = "modified_sheets";
