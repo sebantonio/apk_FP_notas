@@ -901,6 +901,7 @@
     // Guardar nombre en fila N° col <nombre real> (colIdx+3: N° | num | NOMBRE | <nombre real>)
     if (nombreActividad !== undefined) {
       _writeAndRecord(block.filaInicio + 1, colIdx + 3, String(nombreActividad));
+      console.log(`[DEBUG] nombre="${nombreActividad}" → fila=${block.filaInicio + 1} col=${colIdx + 3} hoja=${hoja} bloque=${block.numero}`);
     }
     // Guardar incluida en fila INCLUIDO col colIdx+1
     if (incluida !== undefined) {

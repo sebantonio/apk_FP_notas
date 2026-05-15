@@ -515,7 +515,7 @@
                 renderControls(data);
                 renderForm(data);
                 renderSummary();
-                showMessage("Actividad creada correctamente.", "success");
+                showMessage(`Guardado. Nombre en respuesta: "${data.block && data.block.nombre}"`, "success");
             } catch (error) {
                 showMessage(error.message || "No se pudo crear la actividad.", "error");
             } finally {
