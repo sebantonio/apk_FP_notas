@@ -898,10 +898,19 @@
       if (_isAndroid()) _recordPatch(hoja, r, c, v);
     }
 
-    // Guardar nombre en fila N° col <nombre real> (colIdx+3: N° | num | NOMBRE | <nombre real>)
+    // Detectar offset real del nombre buscando la columna tras "NOMBRE" o similar
+    let nombreColOffset = 3; // default
+    const numRow = layout.rows[block.filaInicio + 1] || [];
+    for (let ci = colIdx; ci < Math.min(numRow.length, colIdx + 10); ci++) {
+      const cell = String(numRow[ci] || "").toUpperCase().trim();
+      if (cell === "NOMBRE" || cell === "NOMBRE ACTIVIDAD" || cell === "ACT." || cell === "ACTIVIDAD") {
+        nombreColOffset = ci - colIdx + 1;
+        break;
+      }
+    }
     if (nombreActividad !== undefined) {
-      _writeAndRecord(block.filaInicio + 1, colIdx + 3, String(nombreActividad));
-      console.log(`[DEBUG] nombre="${nombreActividad}" → fila=${block.filaInicio + 1} col=${colIdx + 3} hoja=${hoja} bloque=${block.numero}`);
+      _writeAndRecord(block.filaInicio + 1, colIdx + nombreColOffset, String(nombreActividad));
+      console.log(`[DEBUG] nombre="${nombreActividad}" offset=${nombreColOffset} fila=${block.filaInicio + 1} col=${colIdx + nombreColOffset} numRow=${JSON.stringify(numRow.slice(colIdx, colIdx+8))}`);
     }
     // Guardar incluida en fila INCLUIDO col colIdx+1
     if (incluida !== undefined) {
@@ -916,7 +925,12 @@
     });
     _clearRowsCache(hoja);
     await _downloadWorkbook();
-    return { ok: true };
+    const verifyRow = layout.rows[block.filaInicio + 1] || [];
+    // Re-leer la celda directamente del sheet tras escribir
+    const ws2 = _sheet(hoja);
+    const writtenCell = ws2[XLSX.utils.encode_cell({ r: block.filaInicio + 1, c: colIdx + nombreColOffset })];
+    const writtenVal = writtenCell ? writtenCell.v : "(celda vacía)";
+    return { ok: true, _debug: `off=${nombreColOffset} col=${colIdx+nombreColOffset} written="${writtenVal}" row=${JSON.stringify(numRow.slice(colIdx,colIdx+8))}` };
   }
 
   window.electronExcel = {
@@ -992,8 +1006,10 @@
     },
     saveNotasActividad: async (payload) => {
       await _ensureWorkbook();
-      await _saveNotasActividad(payload);
-      return _getNotasActividad(payload);
+      const dbgInfo = await _saveNotasActividad(payload);
+      const result = _getNotasActividad(payload);
+      result._debug = dbgInfo._debug || "";
+      return result;
     },
 
     saveCeNotas: async (payload) => {

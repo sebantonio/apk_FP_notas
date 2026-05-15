@@ -515,7 +515,9 @@
                 renderControls(data);
                 renderForm(data);
                 renderSummary();
-                showMessage(`Guardado. Nombre en respuesta: "${data.block && data.block.nombre}"`, "success");
+                const nb = data.block && data.block.nombre;
+                const dbg = data._debug || "";
+                showMessage(`Guardado. block.nombre="${nb}" ${dbg}`, "success");
             } catch (error) {
                 showMessage(error.message || "No se pudo crear la actividad.", "error");
             } finally {
