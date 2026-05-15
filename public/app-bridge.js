@@ -799,7 +799,7 @@
     });
   }
 
-  function _saveNotasActividad({ unidad, tipo, actividad, notas }) {
+  function _saveNotasActividad({ unidad, tipo, actividad, notas, nombreActividad, incluida }) {
     const layout = _detectActivityLayout(unidad);
     const hoja = layout.sheetName;
     const ws = _sheet(hoja);
@@ -810,7 +810,19 @@
     const blocks = _getActivityBlocks(layout.rows, colIdx, layout.primeraFilaBloque, layout.alturaBloque);
     const block = blocks.find((b) => Number(b.numero) === Number(actividad));
     if (!block) throw new Error(`Actividad ${actividad} no encontrada en ${hoja}`);
-    notas.forEach((n) => {
+
+    // Guardar nombre en fila N° col NOMBRE (colIdx+2)
+    if (nombreActividad !== undefined) {
+      const nombreCell = XLSX.utils.encode_cell({ r: block.filaInicio + 1, c: colIdx + 2 });
+      ws[nombreCell] = { v: String(nombreActividad), t: "s" };
+    }
+    // Guardar incluida en fila INCLUIDO col colIdx+1
+    if (incluida !== undefined) {
+      const inclCell = XLSX.utils.encode_cell({ r: block.filaInicio + 2, c: colIdx + 1 });
+      ws[inclCell] = { v: incluida ? "x" : "", t: "s" };
+    }
+    // Guardar notas de alumnos
+    (notas || []).forEach((n) => {
       if (n.rowIdx !== undefined) {
         const cell = XLSX.utils.encode_cell({ r: n.rowIdx, c: notaColIdx });
         ws[cell] = { v: n.nota === "" ? "" : Number(n.nota), t: n.nota === "" ? "s" : "n" };
