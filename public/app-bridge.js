@@ -41,12 +41,14 @@
   const DB_NAME = "apk_fp_notas";
   const DB_STORE = "excel";
   const DB_KEY = "selected_file";
+  const DB_PATCHES_KEY = "cell_patches";
 
   let _workbook = null;
   let _sourceBuffer = null;
   let _fileName = localStorage.getItem(FILE_KEY) || null;
   let _loadPromise = null;
   let _rowsCache = new Map();
+  let _pendingPatches = [];
 
   function _openDb() {
     return new Promise((resolve, reject) => {
@@ -137,6 +139,10 @@
     if (!_workbook && _sourceBuffer) {
       _workbook = XLSX.read(new Uint8Array(_sourceBuffer), { type: "array", cellDates: true });
       _clearRowsCache();
+      if (_isAndroid()) {
+        const patches = await _dbGetPatches();
+        if (patches && patches.length) _applyPatchesToWorkbook(patches);
+      }
     }
     return _workbook;
   }
@@ -326,16 +332,68 @@
     return /Android/i.test(navigator.userAgent);
   }
 
+  async function _dbGetPatches() {
+    try {
+      const db = await _openDb();
+      return new Promise((resolve) => {
+        const tx = db.transaction(DB_STORE, "readonly");
+        const req = tx.objectStore(DB_STORE).get(DB_PATCHES_KEY);
+        req.onsuccess = () => { db.close(); resolve(req.result || []); };
+        req.onerror = () => { db.close(); resolve([]); };
+      });
+    } catch { return []; }
+  }
+
+  async function _dbSavePatches(patches) {
+    try {
+      const db = await _openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, "readwrite");
+        tx.objectStore(DB_STORE).put(patches, DB_PATCHES_KEY);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      });
+    } catch { }
+  }
+
+  function _applyPatchesToWorkbook(patches) {
+    if (!_workbook || !patches || !patches.length) return;
+    for (const p of patches) {
+      const ws = _workbook.Sheets[p.sheet];
+      if (!ws) continue;
+      const cellRef = XLSX.utils.encode_cell({ r: p.r, c: p.c });
+      if (p.v === "" || p.v === null || p.v === undefined) {
+        ws[cellRef] = { v: "", t: "s" };
+      } else if (typeof p.v === "number") {
+        ws[cellRef] = { v: p.v, t: "n" };
+      } else {
+        ws[cellRef] = { v: String(p.v), t: "s" };
+      }
+    }
+  }
+
+  function _recordPatch(sheet, r, c, v) {
+    _pendingPatches.push({ sheet, r, c, v, ts: Date.now() });
+  }
+
+  async function _flushPatchesAndroid() {
+    if (!_pendingPatches.length) return;
+    const existing = await _dbGetPatches();
+    const merged = [...existing, ..._pendingPatches];
+    await _dbSavePatches(merged);
+    _pendingPatches = [];
+  }
+
   async function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
+    if (_isAndroid()) {
+      // En Android: guardar patches en IndexedDB, sin reserializar el workbook completo.
+      await _flushPatchesAndroid();
+      return;
+    }
     const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
     const buffer = new Uint8Array(wbout).buffer;
     _sourceBuffer = buffer;
-    if (_isAndroid()) {
-      // En Android WebView, a.click() no funciona. Solo persistir en IndexedDB.
-      await _dbSet({ fileName: _fileName, buffer });
-      return;
-    }
     const blob = new Blob([new Uint8Array(buffer)], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -403,10 +461,12 @@
           _sourceBuffer = buffer;
           _workbook = null;
           _clearRowsCache();
+          _pendingPatches = [];
           _fileName = file.name;
           localStorage.setItem(FILE_KEY, _fileName);
           localStorage.removeItem(LEGACY_DATA_KEY);
           await _dbSet({ fileName: _fileName, buffer });
+          await _dbSavePatches([]);
           resolve({ fileName: _fileName, filePath: _fileName });
         } catch (err) {
           console.error("No se pudo leer el Excel seleccionado.", err);
@@ -823,21 +883,31 @@
     const block = blocks.find((b) => Number(b.numero) === Number(actividad));
     if (!block) throw new Error(`Actividad ${actividad} no encontrada en ${hoja}`);
 
+    function _writeAndRecord(r, c, v) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      if (v === "" || v === null || v === undefined) {
+        ws[cellRef] = { v: "", t: "s" };
+      } else if (typeof v === "number") {
+        ws[cellRef] = { v, t: "n" };
+      } else {
+        ws[cellRef] = { v: String(v), t: "s" };
+      }
+      if (_isAndroid()) _recordPatch(hoja, r, c, v);
+    }
+
     // Guardar nombre en fila N° col <nombre real> (colIdx+3: N° | num | NOMBRE | <nombre real>)
     if (nombreActividad !== undefined) {
-      const nombreCell = XLSX.utils.encode_cell({ r: block.filaInicio + 1, c: colIdx + 3 });
-      ws[nombreCell] = { v: String(nombreActividad), t: "s" };
+      _writeAndRecord(block.filaInicio + 1, colIdx + 3, String(nombreActividad));
     }
     // Guardar incluida en fila INCLUIDO col colIdx+1
     if (incluida !== undefined) {
-      const inclCell = XLSX.utils.encode_cell({ r: block.filaInicio + 2, c: colIdx + 1 });
-      ws[inclCell] = { v: incluida ? "x" : "", t: "s" };
+      _writeAndRecord(block.filaInicio + 2, colIdx + 1, incluida ? "x" : "");
     }
     // Guardar notas de alumnos
     (notas || []).forEach((n) => {
       if (n.rowIdx !== undefined) {
-        const cell = XLSX.utils.encode_cell({ r: n.rowIdx, c: notaColIdx });
-        ws[cell] = { v: n.nota === "" ? "" : Number(n.nota), t: n.nota === "" ? "s" : "n" };
+        const v = n.nota === "" ? "" : Number(n.nota);
+        _writeAndRecord(n.rowIdx, notaColIdx, v);
       }
     });
     _clearRowsCache(hoja);
