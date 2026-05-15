@@ -34,3 +34,7 @@
 
 ## OBJETIVO:
 Minimizar consumo de tokens manteniendo utilidad.
+
+## GIT:
+- Al terminar cualquier tarea: commit + push siempre, sin preguntar.
+- Mensaje de commit conciso en inglés.
