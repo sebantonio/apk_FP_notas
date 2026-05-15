@@ -45,6 +45,7 @@
   let _workbook = null;
   let _fileName = localStorage.getItem(FILE_KEY) || null;
   let _loadPromise = null;
+  let _rowsCache = new Map();
 
   function _openDb() {
     return new Promise((resolve, reject) => {
@@ -94,6 +95,7 @@
       const bin = atob(b64);
       const buf = Uint8Array.from(bin, c => c.charCodeAt(0));
       _workbook = XLSX.read(buf, { type: "array", cellDates: true });
+      _clearRowsCache();
       localStorage.removeItem(LEGACY_DATA_KEY);
       return true;
     } catch {
@@ -110,6 +112,7 @@
       _fileName = record.fileName || _fileName;
       if (_fileName) localStorage.setItem(FILE_KEY, _fileName);
       _workbook = XLSX.read(new Uint8Array(record.buffer), { type: "array", cellDates: true });
+      _clearRowsCache();
       return true;
     } catch (err) {
       console.warn("No se pudo cargar el Excel guardado.", err);
@@ -144,8 +147,19 @@
     return XLSX.utils.sheet_to_json(_sheet(name), { defval: "", ...opts });
   }
 
+  function _clearRowsCache(sheetName) {
+    if (!sheetName) {
+      _rowsCache = new Map();
+      return;
+    }
+    _rowsCache.delete(sheetName);
+  }
+
   function _rows(name) {
-    return XLSX.utils.sheet_to_json(_sheet(name), { header: 1, defval: "" });
+    if (!_rowsCache.has(name)) {
+      _rowsCache.set(name, XLSX.utils.sheet_to_json(_sheet(name), { header: 1, defval: "" }));
+    }
+    return _rowsCache.get(name);
   }
 
   function _downloadWorkbook() {
@@ -215,6 +229,7 @@
         try {
           const buffer = await file.arrayBuffer();
           _workbook = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
+          _clearRowsCache();
           _fileName = file.name;
           localStorage.setItem(FILE_KEY, _fileName);
           localStorage.removeItem(LEGACY_DATA_KEY);
@@ -349,6 +364,7 @@
     });
 
     _wb().Sheets["DATOS"] = _replaceSheetKeepingMeta(sheet, rows);
+    _clearRowsCache("DATOS");
   }
 
   function _readRraaFromColumns(rows, headerCol, numberCol, descriptionCol) {
@@ -486,6 +502,7 @@
     });
 
     _wb().Sheets["DATOS"] = _replaceSheetKeepingMeta(sheet, rows);
+    _clearRowsCache("DATOS");
   }
 
   function _saveCriteriosToPesos(criterios, ponderacionesUnidad) {
@@ -517,6 +534,7 @@
     });
 
     _wb().Sheets["PESOS"] = _replaceSheetKeepingMeta(sheet, rows);
+    _clearRowsCache("PESOS");
   }
 
   function _getNotasActividad({ unidad, tipo, actividad }) {
@@ -613,6 +631,7 @@
       const cell = XLSX.utils.encode_cell({ r: i + 1, c: colIdx });
       ws[cell] = { v: n.nota === "" ? "" : Number(n.nota), t: n.nota === "" ? "s" : "n" };
     });
+    _clearRowsCache(hoja);
     _downloadWorkbook();
     return { ok: true };
   }
@@ -625,7 +644,11 @@
 
     getUnidades: async () => {
       await _ensureWorkbook();
-      return _getUnidades();
+      return { fileName: _fileName, filePath: _fileName, unidades: _getUnidades() };
+    },
+    getAlumnos: async () => {
+      await _ensureWorkbook();
+      return { fileName: _fileName, filePath: _fileName, alumnos: _getAlumnos() };
     },
     saveUnidades: async (unidades) => {
       const wb = await _ensureWorkbook();
@@ -655,6 +678,7 @@
       const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
       wb.Sheets["Alumnos"] = XLSX.utils.json_to_sheet(alumnos);
+      _clearRowsCache("Alumnos");
       _downloadWorkbook();
       return { ok: true, fileName: _fileName, alumnos };
     },

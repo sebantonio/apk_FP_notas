@@ -656,7 +656,9 @@
         async function cargarArchivoActivoLocal() {
             try {
                 mostrarLoading(true);
-                const result = await window.electronExcel.getSelectedFile();
+                const result = typeof window.electronExcel.getAlumnos === 'function'
+                    ? await window.electronExcel.getAlumnos()
+                    : await window.electronExcel.getSelectedFile();
 
                 if (!result) {
                     mostrarMensaje('No hay Excel activo. Selecciona el archivo desde la pantalla inicial.', 'info');
