@@ -164,6 +164,64 @@
     return wb.Sheets[name];
   }
 
+  function _unitSheetName(unidad) {
+    const value = String(unidad || "1").trim();
+    return /^U\d+/i.test(value) ? value.toUpperCase() : `U${value}`;
+  }
+
+  function _activitySheetName(unidad, tipo) {
+    return `${_unitSheetName(unidad)}_${tipo}`;
+  }
+
+  function _activityDefinitions() {
+    return [
+      { key: "practicas", label: "Practicas", match: ["PRACTICA", "PRÁCTICA"] },
+      { key: "memorias", label: "Memorias", match: ["MEMORIA"] },
+      { key: "otros", label: "Otras actividades", match: ["OTRAS", "OTROS"] },
+      { key: "controles", label: "Controles", match: ["CONTROL"] },
+    ];
+  }
+
+  function _activityDefinition(tipo) {
+    return _activityDefinitions().find((item) => item.key === tipo) || _activityDefinitions()[0];
+  }
+
+  function _findActivityHeaderRow(rows, tipo) {
+    const definition = _activityDefinition(tipo);
+    let sectionRow = -1;
+    for (let rowIdx = 0; rowIdx < rows.length; rowIdx += 1) {
+      const rowText = (rows[rowIdx] || []).map((cell) => String(cell || "").toUpperCase()).join(" ");
+      if (definition.match.some((term) => rowText.includes(term))) {
+        sectionRow = rowIdx;
+        break;
+      }
+    }
+
+    const start = sectionRow >= 0 ? sectionRow : 0;
+    for (let rowIdx = start; rowIdx < Math.min(rows.length, start + 25); rowIdx += 1) {
+      const row = rows[rowIdx] || [];
+      if (row.some((cell) => /^Act\d+/i.test(String(cell || "").trim()))) {
+        return rowIdx;
+      }
+    }
+
+    return rows.findIndex((row) =>
+      (row || []).some((cell) => /^Act\d+/i.test(String(cell || "").trim()))
+    );
+  }
+
+  function _activitySheetRows(unidad, tipo) {
+    const splitSheet = _activitySheetName(unidad, tipo);
+    try {
+      const rows = _rows(splitSheet);
+      return { sheetName: splitSheet, rows, headerRowIdx: _findActivityHeaderRow(rows, tipo) };
+    } catch {}
+
+    const unitSheet = _unitSheetName(unidad);
+    const rows = _rows(unitSheet);
+    return { sheetName: unitSheet, rows, headerRowIdx: _findActivityHeaderRow(rows, tipo) };
+  }
+
   function _readPartialWorkbook(sheetNames) {
     if (!_sourceBuffer) return _workbook;
     const sheets = Array.isArray(sheetNames) ? sheetNames : [sheetNames];
@@ -175,7 +233,9 @@
   }
 
   function _sheetToJson(name, opts = {}) {
-    return XLSX.utils.sheet_to_json(_sheet(name), { defval: "", ...opts });
+    const sheet = _workbook ? _sheet(name) : (_readPartialWorkbook(name).Sheets || {})[name];
+    if (!sheet) throw new Error(`Hoja "${name}" no encontrada.`);
+    return XLSX.utils.sheet_to_json(sheet, { defval: "", ...opts });
   }
 
   function _clearRowsCache(sheetName) {
@@ -571,22 +631,26 @@
     _clearRowsCache("PESOS");
   }
 
-  function _getNotasActividad({ unidad, tipo, actividad }) {
+  function _getNotasActividad({ unidad, tipo, actividad, includeRraa = true }) {
     const unidades = _getUnidades();
     const tipos = _getTiposActividad(unidad);
-    const rraaData = _getRraaCriterios();
-    const hoja = `U${unidad}_${tipo}`;
+    const rraaData = includeRraa ? _getRraaCriterios() : { rraa: [], criterios: [], ponderacionesUnidad: [] };
+    const activitySheet = _activitySheetRows(unidad, tipo);
+    const hoja = activitySheet.sheetName;
     const col = `Act${actividad}`;
     let rows = [];
     let notas = [];
 
     try {
-      rows = _sheetToJson(hoja);
-      notas = rows.map((r, idx) => ({
-        numero: r["Nº"] || r["Numero"] || r["numero"] || idx + 1,
-        nombre: r["Alumno"] || r["ALUMNO"] || r["alumno"] || r["Nombre"] || r["nombre"] || "",
-        nota: r[col] !== undefined ? r[col] : "",
-        rowIdx: idx + 1,
+      rows = activitySheet.rows;
+      const headerRowIdx = activitySheet.headerRowIdx >= 0 ? activitySheet.headerRowIdx : 0;
+      const header = rows[headerRowIdx] || [];
+      const colIdx = header.findIndex((cell) => String(cell || "").trim().toLowerCase() === col.toLowerCase());
+      notas = rows.slice(headerRowIdx + 1).map((row, idx) => ({
+        numero: row[0] || idx + 1,
+        nombre: row[1] || row[2] || "",
+        nota: colIdx >= 0 && row[colIdx] !== undefined ? row[colIdx] : "",
+        rowIdx: headerRowIdx + idx + 1,
       })).filter(item => item.nombre);
     } catch {
       notas = _getAlumnos().map((alumno, idx) => ({
@@ -623,18 +687,11 @@
   }
 
   function _getTiposActividad(unidad) {
-    const definitions = [
-      { key: "practicas", label: "Practicas" },
-      { key: "memorias", label: "Memorias" },
-      { key: "otros", label: "Otras actividades" },
-      { key: "controles", label: "Controles" },
-    ];
-
-    return definitions.map((definition) => {
-      const hoja = `U${unidad}_${definition.key}`;
+    return _activityDefinitions().map((definition) => {
       let actividades = [];
       try {
-        const header = _rows(hoja)[0] || [];
+        const sheetData = _activitySheetRows(unidad, definition.key);
+        const header = sheetData.rows[sheetData.headerRowIdx >= 0 ? sheetData.headerRowIdx : 0] || [];
         actividades = header
           .map((value) => {
             const match = String(value || "").match(/^Act(\d+)/i);
@@ -655,14 +712,16 @@
   }
 
   function _saveNotasActividad({ unidad, tipo, actividad, notas }) {
-    const hoja = `U${unidad}_${tipo}`;
+    const activitySheet = _activitySheetRows(unidad, tipo);
+    const hoja = activitySheet.sheetName;
     const ws = _sheet(hoja);
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-    const header = rows[0] || [];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    const headerRowIdx = activitySheet.headerRowIdx >= 0 ? activitySheet.headerRowIdx : 0;
+    const header = rows[headerRowIdx] || [];
     const colIdx = header.indexOf(`Act${actividad}`);
     if (colIdx < 0) throw new Error(`Columna Act${actividad} no encontrada en ${hoja}`);
     notas.forEach((n, i) => {
-      const cell = XLSX.utils.encode_cell({ r: i + 1, c: colIdx });
+      const cell = XLSX.utils.encode_cell({ r: headerRowIdx + i + 1, c: colIdx });
       ws[cell] = { v: n.nota === "" ? "" : Number(n.nota), t: n.nota === "" ? "s" : "n" };
     });
     _clearRowsCache(hoja);
@@ -722,11 +781,12 @@
     },
 
     getNotasActividad: async (payload) => {
-      await _ensureWorkbook();
+      if (payload && payload.includeRraa === false) await _ensureSourceBuffer();
+      else await _ensureWorkbook();
       return _getNotasActividad(payload);
     },
     getNotasActividadesTipo: async ({ unidad, tipo }) => {
-      await _ensureWorkbook();
+      await _ensureSourceBuffer();
       const tipos = _getTiposActividad(unidad);
       const type = tipos.find(item => item.key === tipo) || tipos[0];
       const actividades = type ? type.actividades : [];
@@ -735,7 +795,7 @@
         notas.push({
           actividad: actividad.numero,
           nombre: actividad.nombre || "",
-          notas: _getNotasActividad({ unidad, tipo, actividad: actividad.numero }).notas,
+          notas: _getNotasActividad({ unidad, tipo, actividad: actividad.numero, includeRraa: false }).notas,
         });
       }
       return { fileName: _fileName, unidad, tipo, tipos, actividades, notas };
@@ -749,7 +809,7 @@
     saveCeNotas: async (payload) => {
       const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
-      const hoja = `CE_U${payload.unidad}`;
+      const hoja = `CE_${_unitSheetName(payload.unidad)}`;
       wb.Sheets[hoja] = XLSX.utils.json_to_sheet(payload.notas || []);
       if (!wb.SheetNames.includes(hoja)) wb.SheetNames.push(hoja);
       _downloadWorkbook();
@@ -759,20 +819,27 @@
     addActividad: async (payload) => {
       const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
-      const hoja = `U${payload.unidad}_${payload.tipo}`;
+      const activitySheet = _activitySheetRows(payload.unidad, payload.tipo);
+      const hoja = activitySheet.sheetName;
       const ws = wb.Sheets[hoja];
       if (!ws) throw new Error(`Hoja ${hoja} no encontrada`);
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-      rows[0].push(`Act${payload.numero}`);
-      rows.slice(1).forEach(r => r.push(""));
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+      const headerRowIdx = activitySheet.headerRowIdx >= 0 ? activitySheet.headerRowIdx : 0;
+      rows[headerRowIdx] = rows[headerRowIdx] || [];
+      const actividades = _getTiposActividad(payload.unidad)
+        .find((item) => item.key === payload.tipo)?.actividades || [];
+      const numero = Number(payload.numero) || (Math.max(0, ...actividades.map((item) => Number(item.numero) || 0)) + 1);
+      rows[headerRowIdx].push(`Act${numero}`);
+      rows.slice(headerRowIdx + 1).forEach(r => r.push(""));
       wb.Sheets[hoja] = XLSX.utils.aoa_to_sheet(rows);
+      _clearRowsCache(hoja);
       _downloadWorkbook();
-      return { ok: true };
+      return _getNotasActividad({ unidad: payload.unidad, tipo: payload.tipo, actividad: numero, includeRraa: false });
     },
 
     getNotasUnidad: async (payload) => {
       await _ensureWorkbook();
-      try { return _sheetToJson(`U${payload.unidad}_resumen`); }
+      try { return _sheetToJson(`${_unitSheetName(payload.unidad)}_resumen`); }
       catch { return []; }
     },
     getNotasEvaluacion: async (payload) => {

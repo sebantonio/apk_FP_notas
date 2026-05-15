@@ -421,7 +421,8 @@
                 const payload = {
                     unidad: unidadSelect.value || "U1",
                     tipo: tipoSelect.value || "practicas",
-                    actividad: options.resetOrder ? 1 : Number(ordenSelect.value || 1)
+                    actividad: options.resetOrder ? 1 : Number(ordenSelect.value || 1),
+                    includeRraa: false
                 };
                 const data = await window.electronExcel.getNotasActividad(payload);
 
