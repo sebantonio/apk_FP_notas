@@ -322,16 +322,28 @@
     return _rowsCache.get(name);
   }
 
-  function _downloadWorkbook() {
+  function _isAndroid() {
+    return /Android/i.test(navigator.userAgent);
+  }
+
+  async function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
     const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([wbout], { type: "application/octet-stream" });
+    const buffer = new Uint8Array(wbout).buffer;
+    _sourceBuffer = buffer;
+    if (_isAndroid()) {
+      // En Android WebView, a.click() no funciona. Solo persistir en IndexedDB.
+      await _dbSet({ fileName: _fileName, buffer });
+      return;
+    }
+    const blob = new Blob([new Uint8Array(buffer)], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = _fileName;
     a.click();
     URL.revokeObjectURL(url);
+    await _dbSet({ fileName: _fileName, buffer });
   }
 
   function _buildResult() {
@@ -799,7 +811,7 @@
     });
   }
 
-  function _saveNotasActividad({ unidad, tipo, actividad, notas, nombreActividad, incluida }) {
+  async function _saveNotasActividad({ unidad, tipo, actividad, notas, nombreActividad, incluida }) {
     const layout = _detectActivityLayout(unidad);
     const hoja = layout.sheetName;
     const ws = _sheet(hoja);
@@ -829,7 +841,7 @@
       }
     });
     _clearRowsCache(hoja);
-    _downloadWorkbook();
+    await _downloadWorkbook();
     return { ok: true };
   }
 
@@ -855,7 +867,7 @@
       const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
       _saveUnidadesToDatos(unidades);
-      _downloadWorkbook();
+      await _downloadWorkbook();
       return { ok: true, fileName: _fileName, unidades: _getUnidades() };
     },
 
@@ -871,7 +883,7 @@
       if (!wb) throw new Error("Sin archivo");
       _saveRraaToDatos(payload.rraa || []);
       _saveCriteriosToPesos(payload.criterios || [], payload.ponderacionesUnidad || []);
-      _downloadWorkbook();
+      await _downloadWorkbook();
       return { ok: true, ..._getRraaCriterios() };
     },
 
@@ -880,7 +892,7 @@
       if (!wb) throw new Error("Sin archivo");
       wb.Sheets["Alumnos"] = XLSX.utils.json_to_sheet(alumnos);
       _clearRowsCache("Alumnos");
-      _downloadWorkbook();
+      await _downloadWorkbook();
       return { ok: true, fileName: _fileName, alumnos };
     },
 
@@ -906,7 +918,7 @@
     },
     saveNotasActividad: async (payload) => {
       await _ensureWorkbook();
-      _saveNotasActividad(payload);
+      await _saveNotasActividad(payload);
       return _getNotasActividad(payload);
     },
 
@@ -916,7 +928,7 @@
       const hoja = `CE_${_unitSheetName(payload.unidad)}`;
       wb.Sheets[hoja] = XLSX.utils.json_to_sheet(payload.notas || []);
       if (!wb.SheetNames.includes(hoja)) wb.SheetNames.push(hoja);
-      _downloadWorkbook();
+      await _downloadWorkbook();
       return { ok: true };
     },
 
@@ -987,7 +999,7 @@
       ws["!ref"] = XLSX.utils.encode_range(ref);
 
       _clearRowsCache(hoja);
-      _downloadWorkbook();
+      await _downloadWorkbook();
       return _getNotasActividad({ unidad: payload.unidad, tipo: payload.tipo, actividad: numero, includeRraa: false });
     },
 
@@ -1029,7 +1041,7 @@
       rows.push(payload);
       wb.Sheets["Diario"] = XLSX.utils.json_to_sheet(rows);
       if (!wb.SheetNames.includes("Diario")) wb.SheetNames.push("Diario");
-      _downloadWorkbook();
+      await _downloadWorkbook();
       return { ok: true };
     },
     deleteDiarioEntrada: async (payload) => {
@@ -1039,7 +1051,7 @@
       try { rows = _sheetToJson("Diario"); } catch {}
       rows = rows.filter(r => !(r.fecha === payload.fecha && r.texto === payload.texto));
       wb.Sheets["Diario"] = XLSX.utils.json_to_sheet(rows);
-      _downloadWorkbook();
+      await _downloadWorkbook();
       return { ok: true };
     },
   };
