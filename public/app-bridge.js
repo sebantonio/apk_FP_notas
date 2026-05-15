@@ -1,7 +1,6 @@
 (function () {
   if (window.electronExcel) return;
 
-  // Si Tauri está disponible (desktop), usar el bridge original
   const tauriCore = window.__TAURI__ && window.__TAURI__.core;
   if (tauriCore && typeof tauriCore.invoke === "function") {
     const invoke = tauriCore.invoke;
@@ -37,48 +36,114 @@
     return;
   }
 
-  // ── Bridge Android/Web ──────────────────────────────────────────────────────
-
   const FILE_KEY = "android_excel_file_name";
-  const DATA_KEY = "android_excel_data"; // base64 del xlsx en memoria
+  const LEGACY_DATA_KEY = "android_excel_data";
+  const DB_NAME = "apk_fp_notas";
+  const DB_STORE = "excel";
+  const DB_KEY = "selected_file";
 
   let _workbook = null;
   let _fileName = localStorage.getItem(FILE_KEY) || null;
+  let _loadPromise = null;
 
-  // Carga el workbook desde localStorage si existe
-  function _loadFromStorage() {
-    const b64 = localStorage.getItem(DATA_KEY);
+  function _openDb() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error("IndexedDB no disponible"));
+        return;
+      }
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => request.result.createObjectStore(DB_STORE);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error("No se pudo abrir IndexedDB"));
+    });
+  }
+
+  async function _dbGet() {
+    const db = await _openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readonly");
+      const request = tx.objectStore(DB_STORE).get(DB_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error || new Error("No se pudo leer IndexedDB"));
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => db.close();
+    });
+  }
+
+  async function _dbSet(record) {
+    const db = await _openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readwrite");
+      tx.objectStore(DB_STORE).put(record, DB_KEY);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        reject(tx.error || new Error("No se pudo guardar IndexedDB"));
+      };
+    });
+  }
+
+  function _loadLegacyStorage() {
+    const b64 = localStorage.getItem(LEGACY_DATA_KEY);
     if (!b64) return false;
     try {
-      // atob devuelve una cadena binaria — convertir a Uint8Array sin loop
       const bin = atob(b64);
       const buf = Uint8Array.from(bin, c => c.charCodeAt(0));
       _workbook = XLSX.read(buf, { type: "array", cellDates: true });
+      localStorage.removeItem(LEGACY_DATA_KEY);
       return true;
-    } catch { return false; }
-  }
-
-  function _arrayToBase64(bytes) {
-    let binary = "";
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      binary += String.fromCharCode.apply(null, chunk);
+    } catch {
+      localStorage.removeItem(LEGACY_DATA_KEY);
+      return false;
     }
-    return btoa(binary);
   }
 
-  function _saveToStorage() {
-    if (!_workbook) return;
+  async function _loadFromDb() {
+    if (_workbook) return true;
     try {
-      const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
-      localStorage.setItem(DATA_KEY, _arrayToBase64(new Uint8Array(wbout)));
+      const record = await _dbGet();
+      if (!record || !record.buffer) return false;
+      _fileName = record.fileName || _fileName;
+      if (_fileName) localStorage.setItem(FILE_KEY, _fileName);
+      _workbook = XLSX.read(new Uint8Array(record.buffer), { type: "array", cellDates: true });
+      return true;
     } catch (err) {
-      console.warn("No se pudo guardar el Excel en el almacenamiento local.", err);
+      console.warn("No se pudo cargar el Excel guardado.", err);
+      return false;
     }
   }
 
-  // Descarga el xlsx actual al dispositivo
+  async function _ensureWorkbook() {
+    if (_workbook) return _workbook;
+    if (_loadLegacyStorage()) return _workbook;
+    if (!_loadPromise) {
+      _loadPromise = _loadFromDb().finally(() => {
+        _loadPromise = null;
+      });
+    }
+    await _loadPromise;
+    return _workbook;
+  }
+
+  function _wb() {
+    if (!_workbook) throw new Error("No hay archivo Excel cargado.");
+    return _workbook;
+  }
+
+  function _sheet(name) {
+    const wb = _wb();
+    if (!wb.SheetNames.includes(name)) throw new Error(`Hoja "${name}" no encontrada.`);
+    return wb.Sheets[name];
+  }
+
+  function _sheetToJson(name, opts = {}) {
+    return XLSX.utils.sheet_to_json(_sheet(name), { defval: "", ...opts });
+  }
+
   function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
     const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
@@ -91,47 +156,26 @@
     URL.revokeObjectURL(url);
   }
 
-  function _wb() {
-    if (_workbook) return _workbook;
-    _loadFromStorage();
-    return _workbook;
-  }
-
-  function _sheet(name) {
-    const wb = _wb();
-    if (!wb) throw new Error("No hay archivo Excel cargado.");
-    if (!wb.SheetNames.includes(name)) throw new Error(`Hoja "${name}" no encontrada.`);
-    return wb.Sheets[name];
-  }
-
-  function _sheetToJson(name, opts = {}) {
-    return XLSX.utils.sheet_to_json(_sheet(name), { defval: "", ...opts });
-  }
-
-  // Construye el resultado completo que esperan todos los HTML
   function _buildResult() {
-    const wb = _workbook;
+    const wb = _wb();
     const result = { filePath: _fileName, fileName: _fileName };
 
-    // alumnos (gestor-alumnos.html)
     try {
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets["DATOS"] || wb.Sheets[wb.SheetNames[0]], { defval: "" });
-      result.alumnos = rows;
+      result.alumnos = XLSX.utils.sheet_to_json(wb.Sheets["DATOS"] || wb.Sheets[wb.SheetNames[0]], { defval: "" });
     } catch { result.alumnos = []; }
 
-    // rraa + criterios (gestor-rraa-criterios.html)
     try {
       result.rraa = XLSX.utils.sheet_to_json(wb.Sheets["RRAA"] || {}, { defval: "" });
     } catch { result.rraa = []; }
+
     try {
       result.criterios = XLSX.utils.sheet_to_json(wb.Sheets["Criterios"] || {}, { defval: "" });
     } catch { result.criterios = []; }
-    result.ponderacionesUnidad = [];
 
+    result.ponderacionesUnidad = [];
     return result;
   }
 
-  // Abre el selector de archivos nativo de Android
   function _openFilePicker() {
     return new Promise((resolve) => {
       const input = document.createElement("input");
@@ -159,16 +203,20 @@
         clearTimeout(cancelTimer);
         const file = input.files && input.files[0];
         cleanup();
-        if (!file) { resolve(null); return; }
+        if (!file) {
+          resolve(null);
+          return;
+        }
         try {
-          const buf = await file.arrayBuffer();
-          _workbook = XLSX.read(new Uint8Array(buf), { type: "array", cellDates: true });
+          const buffer = await file.arrayBuffer();
+          _workbook = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
           _fileName = file.name;
           localStorage.setItem(FILE_KEY, _fileName);
-          const result = _buildResult();
-          _saveToStorage();
-          resolve(result);
-        } catch(e) {
+          localStorage.removeItem(LEGACY_DATA_KEY);
+          await _dbSet({ fileName: _fileName, buffer });
+          resolve(_buildResult());
+        } catch (err) {
+          console.error("No se pudo leer el Excel seleccionado.", err);
           resolve(null);
         }
       });
@@ -184,8 +232,6 @@
       input.click();
     });
   }
-
-  // ── Helpers para leer datos de las hojas ────────────────────────────────────
 
   function _getAlumnos() {
     const rows = _sheetToJson("Alumnos");
@@ -246,92 +292,78 @@
       const cell = XLSX.utils.encode_cell({ r: i + 1, c: colIdx });
       ws[cell] = { v: n.nota === "" ? "" : Number(n.nota), t: n.nota === "" ? "s" : "n" };
     });
-    _saveToStorage();
     _downloadWorkbook();
     return { ok: true };
   }
 
-  // ── API pública ─────────────────────────────────────────────────────────────
-
   window.electronExcel = {
     selectFile: () => _openFilePicker(),
+    getSelectedFile: async () => (_fileName && await _ensureWorkbook()) ? _buildResult() : null,
+    setSelectedFile: async (filePath) => (_fileName === filePath && await _ensureWorkbook()) ? _buildResult() : null,
+    verifyFileExists: async () => !!_workbook || !!(await _dbGet()),
 
-    getSelectedFile: () => {
-      if (_fileName && (_workbook || _loadFromStorage())) {
-        return Promise.resolve(_buildResult());
-      }
-      return Promise.resolve(null);
+    getUnidades: async () => {
+      await _ensureWorkbook();
+      return _getUnidades();
     },
-
-    setSelectedFile: (filePath) => {
-      if (_fileName === filePath && (_workbook || _loadFromStorage())) {
-        return Promise.resolve(_buildResult());
-      }
-      return Promise.resolve(null);
-    },
-
-    verifyFileExists: (_filePath) => {
-      return Promise.resolve(!!_workbook || !!localStorage.getItem(DATA_KEY));
-    },
-
-    getUnidades: () => Promise.resolve(_getUnidades()),
-    saveUnidades: (unidades) => {
-      // Actualiza hoja Unidades
-      const wb = _wb();
+    saveUnidades: async (unidades) => {
+      const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
-      const ws = XLSX.utils.json_to_sheet(unidades);
-      wb.Sheets["Unidades"] = ws;
-      _saveToStorage();
+      wb.Sheets["Unidades"] = XLSX.utils.json_to_sheet(unidades);
       _downloadWorkbook();
-      return Promise.resolve({ ok: true });
+      return { ok: true };
     },
 
-    getRraaCriterios: () => Promise.resolve(_getRraaCriterios()),
-    saveRraaCriterios: (payloadOrRraa, criterios, ponderacionesUnidad = []) => {
+    getRraaCriterios: async () => {
+      await _ensureWorkbook();
+      return _getRraaCriterios();
+    },
+    saveRraaCriterios: async (payloadOrRraa, criterios, ponderacionesUnidad = []) => {
       const payload = Array.isArray(payloadOrRraa)
         ? { rraa: payloadOrRraa, criterios, ponderacionesUnidad }
         : payloadOrRraa;
-      const wb = _wb();
+      const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
       wb.Sheets["RRAA"] = XLSX.utils.json_to_sheet(payload.rraa || []);
       wb.Sheets["Criterios"] = XLSX.utils.json_to_sheet(payload.criterios || []);
-      _saveToStorage();
       _downloadWorkbook();
-      return Promise.resolve({ ok: true });
+      return { ok: true };
     },
 
-    saveAlumnos: (alumnos) => {
-      const wb = _wb();
+    saveAlumnos: async (alumnos) => {
+      const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
       wb.Sheets["Alumnos"] = XLSX.utils.json_to_sheet(alumnos);
-      _saveToStorage();
       _downloadWorkbook();
-      return Promise.resolve({ ok: true });
+      return { ok: true };
     },
 
-    getNotasActividad: (payload) => Promise.resolve(_getNotasActividad(payload)),
-    getNotasActividadesTipo: ({ unidad, tipo }) => {
-      try {
-        const hoja = `U${unidad}_${tipo}`;
-        return Promise.resolve(_sheetToJson(hoja));
-      } catch { return Promise.resolve([]); }
+    getNotasActividad: async (payload) => {
+      await _ensureWorkbook();
+      return _getNotasActividad(payload);
     },
-    saveNotasActividad: (payload) => Promise.resolve(_saveNotasActividad(payload)),
+    getNotasActividadesTipo: async ({ unidad, tipo }) => {
+      await _ensureWorkbook();
+      try { return _sheetToJson(`U${unidad}_${tipo}`); }
+      catch { return []; }
+    },
+    saveNotasActividad: async (payload) => {
+      await _ensureWorkbook();
+      return _saveNotasActividad(payload);
+    },
 
-    saveCeNotas: (payload) => {
-      // Guarda notas de criterios de evaluación
-      const wb = _wb();
+    saveCeNotas: async (payload) => {
+      const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
       const hoja = `CE_U${payload.unidad}`;
       wb.Sheets[hoja] = XLSX.utils.json_to_sheet(payload.notas || []);
       if (!wb.SheetNames.includes(hoja)) wb.SheetNames.push(hoja);
-      _saveToStorage();
       _downloadWorkbook();
-      return Promise.resolve({ ok: true });
+      return { ok: true };
     },
 
-    addActividad: (payload) => {
-      const wb = _wb();
+    addActividad: async (payload) => {
+      const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
       const hoja = `U${payload.unidad}_${payload.tipo}`;
       const ws = wb.Sheets[hoja];
@@ -340,69 +372,61 @@
       rows[0].push(`Act${payload.numero}`);
       rows.slice(1).forEach(r => r.push(""));
       wb.Sheets[hoja] = XLSX.utils.aoa_to_sheet(rows);
-      _saveToStorage();
       _downloadWorkbook();
-      return Promise.resolve({ ok: true });
+      return { ok: true };
     },
 
-    getNotasUnidad: (payload) => {
-      try {
-        return Promise.resolve(_sheetToJson(`U${payload.unidad}_resumen`));
-      } catch { return Promise.resolve([]); }
+    getNotasUnidad: async (payload) => {
+      await _ensureWorkbook();
+      try { return _sheetToJson(`U${payload.unidad}_resumen`); }
+      catch { return []; }
     },
-
-    getNotasEvaluacion: (payload) => {
-      try {
-        return Promise.resolve(_sheetToJson(`Eval${payload.evaluacion}`));
-      } catch { return Promise.resolve([]); }
+    getNotasEvaluacion: async (payload) => {
+      await _ensureWorkbook();
+      try { return _sheetToJson(`Eval${payload.evaluacion}`); }
+      catch { return []; }
     },
-
-    getNotasEvaluacionAlumno: (payload) => {
+    getNotasEvaluacionAlumno: async (payload) => {
+      await _ensureWorkbook();
       try {
         const rows = _sheetToJson(`Eval${payload.evaluacion}`);
-        return Promise.resolve(rows.find(r => r["Alumno"] === payload.alumno) || null);
-      } catch { return Promise.resolve(null); }
+        return rows.find(r => r["Alumno"] === payload.alumno) || null;
+      } catch { return null; }
     },
 
-    getAlumnosInformes: () => {
-      try { return Promise.resolve(_getAlumnos()); }
-      catch { return Promise.resolve([]); }
+    getAlumnosInformes: async () => {
+      await _ensureWorkbook();
+      try { return _getAlumnos(); }
+      catch { return []; }
     },
-
     openExternal: (url) => { window.open(url, "_blank"); return Promise.resolve(); },
 
-    getDiarioData: () => {
-      try { return Promise.resolve(_sheetToJson("Diario")); }
-      catch { return Promise.resolve([]); }
+    getDiarioData: async () => {
+      await _ensureWorkbook();
+      try { return _sheetToJson("Diario"); }
+      catch { return []; }
     },
-
-    saveDiarioEntrada: (payload) => {
-      const wb = _wb();
+    saveDiarioEntrada: async (payload) => {
+      const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
       let rows = [];
       try { rows = _sheetToJson("Diario"); } catch {}
       rows.push(payload);
       wb.Sheets["Diario"] = XLSX.utils.json_to_sheet(rows);
       if (!wb.SheetNames.includes("Diario")) wb.SheetNames.push("Diario");
-      _saveToStorage();
       _downloadWorkbook();
-      return Promise.resolve({ ok: true });
+      return { ok: true };
     },
-
-    deleteDiarioEntrada: (payload) => {
-      const wb = _wb();
+    deleteDiarioEntrada: async (payload) => {
+      const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
       let rows = [];
       try { rows = _sheetToJson("Diario"); } catch {}
       rows = rows.filter(r => !(r.fecha === payload.fecha && r.texto === payload.texto));
       wb.Sheets["Diario"] = XLSX.utils.json_to_sheet(rows);
-      _saveToStorage();
       _downloadWorkbook();
-      return Promise.resolve({ ok: true });
+      return { ok: true };
     },
   };
-
-  // Intentar cargar desde storage al arrancar
-  _loadFromStorage();
 
 })();
