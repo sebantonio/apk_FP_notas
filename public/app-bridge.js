@@ -37,6 +37,7 @@
   }
 
   const FILE_KEY = "android_excel_file_name";
+  const URI_KEY = "android_excel_file_uri";
   const LEGACY_DATA_KEY = "android_excel_data";
   const DB_NAME = "apk_fp_notas";
   const DB_STORE = "excel";
@@ -47,10 +48,24 @@
   let _workbook = null;
   let _sourceBuffer = null;
   let _fileName = localStorage.getItem(FILE_KEY) || null;
+  let _fileUri = localStorage.getItem(URI_KEY) || null;
   let _loadPromise = null;
   let _rowsCache = new Map();
   let _pendingPatches = [];
   let _activityMeta = null;
+
+  function _nativeExcel() {
+    return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.ExcelFile
+      ? window.Capacitor.Plugins.ExcelFile
+      : null;
+  }
+
+  function _base64ToArrayBuffer(base64) {
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
 
   function _openDb() {
     return new Promise((resolve, reject) => {
@@ -111,6 +126,7 @@
 
   async function _loadFromDb() {
     if (_sourceBuffer || _workbook) return true;
+    if (await _loadFromNativeFile()) return true;
     try {
       const record = await _dbGet();
       if (!record || !record.buffer) return false;
@@ -121,6 +137,26 @@
       return true;
     } catch (err) {
       console.warn("No se pudo cargar el Excel guardado.", err);
+      return false;
+    }
+  }
+
+  async function _loadFromNativeFile() {
+    const nativeExcel = _nativeExcel();
+    if (!nativeExcel || typeof nativeExcel.readSelectedFile !== "function") return false;
+    try {
+      const record = await nativeExcel.readSelectedFile();
+      if (!record || !record.base64) return false;
+      _fileName = record.fileName || _fileName;
+      _fileUri = record.uri || _fileUri;
+      if (_fileName) localStorage.setItem(FILE_KEY, _fileName);
+      if (_fileUri) localStorage.setItem(URI_KEY, _fileUri);
+      _sourceBuffer = _base64ToArrayBuffer(record.base64);
+      _workbook = null;
+      _clearRowsCache();
+      return true;
+    } catch (err) {
+      console.warn("No se pudo cargar el Excel nativo.", err);
       return false;
     }
   }
@@ -501,6 +537,16 @@
 
   async function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
+    const nativeExcel = _nativeExcel();
+    if (nativeExcel && typeof nativeExcel.saveFile === "function") {
+      const base64 = XLSX.write(_workbook, { bookType: "xlsx", type: "base64" });
+      await nativeExcel.saveFile({ uri: _fileUri, base64 });
+      _sourceBuffer = _base64ToArrayBuffer(base64);
+      _pendingPatches = [];
+      await _dbSavePatches([]);
+      await _dbSaveSheets({});
+      return;
+    }
     if (_isAndroid()) {
       await _flushPatchesAndroid();
       return;
@@ -540,6 +586,30 @@
   }
 
   function _openFilePicker() {
+    const nativeExcel = _nativeExcel();
+    if (nativeExcel && typeof nativeExcel.selectFile === "function") {
+      return nativeExcel.selectFile().then(async (record) => {
+        if (!record || record.cancelled || !record.base64) return null;
+        _sourceBuffer = _base64ToArrayBuffer(record.base64);
+        _workbook = null;
+        _clearRowsCache();
+        _pendingPatches = [];
+        _activityMeta = {};
+        _fileName = record.fileName || "archivo.xlsx";
+        _fileUri = record.uri || null;
+        localStorage.setItem(FILE_KEY, _fileName);
+        if (_fileUri) localStorage.setItem(URI_KEY, _fileUri);
+        localStorage.removeItem(LEGACY_DATA_KEY);
+        await _dbSavePatches([]);
+        await _dbSaveSheets({});
+        await _dbSaveActivityMeta({});
+        return { fileName: _fileName, filePath: _fileUri || _fileName };
+      }).catch((err) => {
+        console.error("No se pudo leer el Excel seleccionado.", err);
+        return null;
+      });
+    }
+
     return new Promise((resolve) => {
       const input = document.createElement("input");
       input.type = "file";
@@ -578,7 +648,9 @@
           _pendingPatches = [];
           _activityMeta = {};
           _fileName = file.name;
+          _fileUri = null;
           localStorage.setItem(FILE_KEY, _fileName);
+          localStorage.removeItem(URI_KEY);
           localStorage.removeItem(LEGACY_DATA_KEY);
           await _dbSet({ fileName: _fileName, buffer });
           await _dbSavePatches([]);
