@@ -69,6 +69,21 @@
             font-size: clamp(1.55rem, 3vw, 2.35rem);
             line-height: 1.05;
             letter-spacing: 0;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .version-badge {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--muted);
+            background: rgba(255,255,255,0.82);
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 2px 8px;
+            letter-spacing: 0.03em;
+            vertical-align: middle;
         }
 
         .brand p {
@@ -629,7 +644,7 @@
             <div class="brand">
                 <div class="brand-mark">FP</div>
                 <div>
-                    <h1>Gestor de Notas FP</h1>
+                    <h1>Gestor de Notas FP <span class="version-badge" id="versionBadge"></span></h1>
                     <p>Panel de trabajo para el curso actual</p>
                 </div>
             </div>
@@ -638,7 +653,7 @@
                     <button class="nav-button" type="button" onclick="window.history.back()">← Atrás</button>
                     <a class="nav-link" href="index.html">⌂ Inicio</a>
                 </nav>
-                <div class="version">v0.1.0</div>
+                <div class="version" id="versionTag"></div>
             </div>
         </header>
 
@@ -802,6 +817,9 @@
     <script src="xlsx.full.min.js"></script>
     <script src="app-bridge.js"></script>
     <script>
+        const APP_VERSION = "v0.1.1";
+        document.querySelectorAll("#versionBadge, #versionTag").forEach(el => el.textContent = APP_VERSION);
+
         const RECENT_KEY = "recentExcelFiles";
         const MAX_RECENT = 6;
 
