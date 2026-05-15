@@ -908,8 +908,9 @@
 
                 archivoOriginal = { name: result.fileName, path: result.filePath };
                 workbook = null;
-                raaaActuales = result.rraa;
-                criteriosActuales = result.criterios;
+                raaaActuales = result.rraa || [];
+                criteriosActuales = result.criterios || [];
+                completarRraaDesdeCriterios();
                 ponderacionesUnidad = result.ponderacionesUnidad || [];
                 criterioRaActivo = criterioRaActivo || primerRAConCriterios();
                 ponderacionUnidadActiva = ponderacionUnidadActiva || primeraUnidadPonderacion();
@@ -1231,6 +1232,19 @@
             return listaRANumeros().map((numero) => `
                 <option value="${numero}" ${Number(numero) === Number(raNumero) ? 'selected' : ''}>RA ${numero}</option>
             `).join('');
+        }
+
+        function completarRraaDesdeCriterios() {
+            const existentes = new Set(raaaActuales.map((rraa) => Number(rraa.numero)).filter(Boolean));
+            listaRANumeros().forEach((numero) => {
+                if (!existentes.has(Number(numero))) {
+                    raaaActuales.push({
+                        numero,
+                        descripcion: ''
+                    });
+                }
+            });
+            raaaActuales.sort((a, b) => Number(a.numero) - Number(b.numero));
         }
 
         function listaRANumeros() {

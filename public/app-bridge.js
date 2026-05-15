@@ -351,21 +351,31 @@
     _wb().Sheets["DATOS"] = _replaceSheetKeepingMeta(sheet, rows);
   }
 
-  function _readRraa(rows) {
-    const header = rows.findIndex((row) =>
-      row[1] && String(row[1]).toUpperCase().includes("RRAA")
-    );
+  function _readRraaFromColumns(rows, headerCol, numberCol, descriptionCol) {
+    const header = rows.findIndex((row) => {
+      const value = row && row[headerCol];
+      const text = String(value || "").toUpperCase();
+      return text.includes("RRAA") || text.includes("RESULTADOS DE APRENDIZAJE");
+    });
     if (header < 0) return [];
 
     const rraa = [];
     for (let rowIdx = header + 1; rowIdx < rows.length; rowIdx += 1) {
       const row = rows[rowIdx] || [];
-      const numero = row[0];
-      const descripcion = row[1];
+      const numero = row[numberCol];
+      const descripcion = row[descriptionCol];
       if (!numero || !descripcion || String(descripcion).trim() === "") break;
       rraa.push({ numero, descripcion });
     }
     return rraa;
+  }
+
+  function _readRraa(rows) {
+    const candidates = [
+      _readRraaFromColumns(rows, 1, 0, 1),
+      _readRraaFromColumns(rows, 6, 5, 6),
+    ];
+    return candidates.find((items) => items.length > 0) || [];
   }
 
   function _isCriteriaCode(value) {
