@@ -2,17 +2,17 @@
 
 ## REGLAS:
 - Maximo ahorro de tokens.
-- No explicaciones largas.
+- No explicaciones .
 - No repitas el prompt.
 - No introducciones ni conclusiones.
 - Solo mostrar:
-  1. Cambios realizados
-  2. Archivos modificados
-  3. Errores encontrados
+  1. Cambios finales realizados
+  2. Archivos finales modificados
+  3. Errores finales encontrados
   4. Resultado final
 
 ## FORMATO:
-- Frases cortas.
+- Frases muy cortas.
 - Bullet points.
 - Sin markdown innecesario.
 - Sin ejemplos salvo que se pidan.
