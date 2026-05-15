@@ -247,14 +247,7 @@
       _clearRowsCache();
       if (_isAndroid()) {
         // Restaurar hojas guardadas individualmente (más fiable que patches)
-        const savedSheets = await _dbGetSheets();
-        for (const [sheetName, buffer] of Object.entries(savedSheets || {})) {
-          try {
-            const miniWb = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
-            _workbook.Sheets[sheetName] = miniWb.Sheets[sheetName];
-            _clearRowsCache(sheetName);
-          } catch {}
-        }
+        await _dbSaveSheets({});
         // Aplicar también patches por si acaso
         const patches = await _dbGetPatches();
         if (patches && patches.length) _applyPatchesToWorkbook(patches);
@@ -549,6 +542,10 @@
       } else {
         ws[cellRef] = { v: String(p.v), t: "s" };
       }
+      const ref = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
+      if (p.r > ref.e.r) ref.e.r = p.r;
+      if (p.c > ref.e.c) ref.e.c = p.c;
+      ws["!ref"] = XLSX.utils.encode_range(ref);
       sheetsModified.add(p.sheet);
     }
     sheetsModified.forEach((s) => _clearRowsCache(s));
@@ -587,24 +584,23 @@
   async function _flushPatchesAndroid() {
     if (!_pendingPatches.length) return;
     // Guardar cada hoja modificada completa (solo esa hoja, no el workbook entero)
-    const sheetNames = [...new Set(_pendingPatches.map(p => p.sheet))];
-    const existing = await _dbGetSheets();
-    for (const sheetName of sheetNames) {
-      const ws = _workbook && _workbook.Sheets[sheetName];
-      if (!ws) continue;
-      const miniWb = { SheetNames: [sheetName], Sheets: { [sheetName]: ws } };
-      const out = XLSX.write(miniWb, { bookType: "xlsx", type: "array" });
-      existing[sheetName] = new Uint8Array(out).buffer;
-    }
-    await _dbSaveSheets(existing);
+    await _dbSaveSheets({});
     // También guardar patches para compatibilidad
     const existingPatches = await _dbGetPatches();
-    await _dbSavePatches([...existingPatches, ..._pendingPatches]);
+    const latest = new Map();
+    for (const patch of [...existingPatches, ..._pendingPatches]) {
+      latest.set(`${patch.sheet}|${patch.r}|${patch.c}`, patch);
+    }
+    await _dbSavePatches([...latest.values()]);
     _pendingPatches = [];
   }
 
   async function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
+    if (_isAndroid()) {
+      await _flushPatchesAndroid();
+      return;
+    }
     const nativeExcel = _nativeExcel();
     if (nativeExcel && _fileUri) {
       const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
@@ -614,10 +610,6 @@
       _pendingPatches = [];
       await _dbSavePatches([]);
       await _dbSaveSheets({});
-      return;
-    }
-    if (_isAndroid()) {
-      await _flushPatchesAndroid();
       return;
     }
     const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
