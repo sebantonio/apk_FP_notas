@@ -641,6 +641,37 @@
             }
         });
 
+        function mostrarAlumnosLocales(result) {
+            archivoOriginal = { name: result.fileName, path: result.filePath };
+            workbook = null;
+            hayCambiosSinGuardar = false;
+            limpiarTemporizadorAutoguardado();
+            mostrarTablaAlumnos(result.alumnos || []);
+            actualizarStats(result.alumnos || []);
+            document.getElementById('uploadArea').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+            mostrarMensaje(`Archivo conectado: ${result.fileName}`, 'success');
+        }
+
+        async function cargarArchivoActivoLocal() {
+            try {
+                mostrarLoading(true);
+                const result = await window.electronExcel.getSelectedFile();
+
+                if (!result) {
+                    mostrarMensaje('No hay Excel activo. Selecciona el archivo desde la pantalla inicial.', 'info');
+                    mostrarLoading(false);
+                    return;
+                }
+
+                mostrarAlumnosLocales(result);
+                mostrarLoading(false);
+            } catch (error) {
+                mostrarMensaje('Error al leer el Excel activo: ' + error.message, 'error');
+                mostrarLoading(false);
+            }
+        }
+
         // ===== CARGAR ARCHIVO LOCAL EN ELECTRON =====
         async function seleccionarArchivoLocal() {
             try {
@@ -652,15 +683,7 @@
                     return;
                 }
 
-                archivoOriginal = { name: result.fileName, path: result.filePath };
-                workbook = null;
-                hayCambiosSinGuardar = false;
-                limpiarTemporizadorAutoguardado();
-                mostrarTablaAlumnos(result.alumnos);
-                actualizarStats(result.alumnos);
-                document.getElementById('uploadArea').style.display = 'none';
-                document.getElementById('mainContent').style.display = 'block';
-                mostrarMensaje(`Archivo conectado: ${result.fileName}`, 'success');
+                mostrarAlumnosLocales(result);
                 mostrarLoading(false);
             } catch (error) {
                 mostrarMensaje('Error al abrir el Excel local: ' + error.message, 'error');
@@ -1029,6 +1052,12 @@
             document.querySelector('.upload-hint').textContent = 'Puede estar en una carpeta sincronizada de OneDrive';
             document.querySelector('.actions-right button').textContent = 'Guardar cambios en el Excel';
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (isElectronMode) {
+                cargarArchivoActivoLocal();
+            }
+        });
 
         // Verificar carga de XLSX cada 500ms hasta que esté listo
         const xlsxCheckInterval = setInterval(() => {

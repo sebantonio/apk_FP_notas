@@ -845,6 +845,12 @@
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
 
+        document.addEventListener('DOMContentLoaded', () => {
+            if (isElectronMode) {
+                seleccionarArchivoLocal();
+            }
+        });
+
         uploadArea.addEventListener('click', () => {
             if (isElectronMode) {
                 seleccionarArchivoLocal();
