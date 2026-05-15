@@ -452,6 +452,10 @@
     if (!_workbook || !_fileName) return;
     if (_isAndroid()) {
       await _flushPatchesAndroid();
+      const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
+      const buffer = new Uint8Array(wbout).buffer;
+      _sourceBuffer = buffer;
+      await _dbSet({ fileName: _fileName, buffer });
       return;
     }
     const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
