@@ -26,6 +26,8 @@ public class ExcelFilePlugin extends Plugin {
   private static final String PREFS_NAME = "excel_file";
   private static final String KEY_URI = "uri";
   private static final String KEY_FILE_NAME = "file_name";
+  private static final String KEY_PATCHES_JSON = "patches_json";
+  private static final String KEY_ACTIVITY_META_JSON = "activity_meta_json";
   private OutputStream writeStream = null;
 
   @PluginMethod
@@ -191,6 +193,35 @@ public class ExcelFilePlugin extends Plugin {
       closeWriteStream();
       call.reject("No se pudo cerrar el Excel: " + ex.getMessage(), ex);
     }
+  }
+
+  @PluginMethod
+  public void getNotebookState(PluginCall call) {
+    JSObject ret = new JSObject();
+    ret.put("patchesJson", getPrefs().getString(KEY_PATCHES_JSON, "[]"));
+    ret.put("activityMetaJson", getPrefs().getString(KEY_ACTIVITY_META_JSON, "{}"));
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void saveNotebookState(PluginCall call) {
+    String patchesJson = call.getString("patchesJson");
+    String activityMetaJson = call.getString("activityMetaJson");
+    SharedPreferences.Editor editor = getPrefs().edit();
+    if (patchesJson != null) editor.putString(KEY_PATCHES_JSON, patchesJson);
+    if (activityMetaJson != null) editor.putString(KEY_ACTIVITY_META_JSON, activityMetaJson);
+    editor.apply();
+    JSObject ret = new JSObject();
+    ret.put("ok", true);
+    call.resolve(ret);
+  }
+
+  @PluginMethod
+  public void clearNotebookState(PluginCall call) {
+    getPrefs().edit().remove(KEY_PATCHES_JSON).remove(KEY_ACTIVITY_META_JSON).apply();
+    JSObject ret = new JSObject();
+    ret.put("ok", true);
+    call.resolve(ret);
   }
 
   private void resolveWithInfo(PluginCall call, Uri uri, String fileName) {

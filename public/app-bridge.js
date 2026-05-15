@@ -465,8 +465,30 @@
     return _isAndroid() || _isCapacitorApp() || !!_nativeExcel();
   }
 
+  async function _nativeNotebookState() {
+    const nativeExcel = _nativeExcel();
+    if (!nativeExcel || typeof nativeExcel.getNotebookState !== "function") return {};
+    try {
+      return await nativeExcel.getNotebookState();
+    } catch {
+      return {};
+    }
+  }
+
+  async function _saveNativeNotebookState({ patches, meta } = {}) {
+    const nativeExcel = _nativeExcel();
+    if (!nativeExcel || typeof nativeExcel.saveNotebookState !== "function") return;
+    try {
+      await nativeExcel.saveNotebookState({
+        ...(patches !== undefined ? { patchesJson: JSON.stringify(patches || []) } : {}),
+        ...(meta !== undefined ? { activityMetaJson: JSON.stringify(meta || {}) } : {}),
+      });
+    } catch {}
+  }
+
   async function _dbGetPatches() {
     let stored = [];
+    let nativeStored = [];
     try {
       const db = await _openDb();
       stored = await new Promise((resolve) => {
@@ -477,9 +499,13 @@
       });
     } catch {}
     try {
+      const state = await _nativeNotebookState();
+      nativeStored = JSON.parse(state.patchesJson || "[]");
+    } catch {}
+    try {
       const backup = JSON.parse(localStorage.getItem(LS_PATCHES_KEY) || "[]");
       const latest = new Map();
-      for (const patch of [...stored, ...backup]) {
+      for (const patch of [...stored, ...backup, ...nativeStored]) {
         latest.set(`${patch.sheet}|${patch.r}|${patch.c}`, patch);
       }
       return [...latest.values()];
@@ -491,6 +517,7 @@
     try {
       localStorage.setItem(LS_PATCHES_KEY, JSON.stringify(patches || []));
     } catch {}
+    await _saveNativeNotebookState({ patches });
     try {
       const db = await _openDb();
       return new Promise((resolve, reject) => {
@@ -504,6 +531,7 @@
 
   async function _dbGetActivityMeta() {
     let stored = {};
+    let nativeStored = {};
     try {
       const db = await _openDb();
       stored = await new Promise((resolve) => {
@@ -514,9 +542,13 @@
       });
     } catch {}
     try {
-      return { ...stored, ...JSON.parse(localStorage.getItem(LS_ACTIVITY_META_KEY) || "{}") };
+      const state = await _nativeNotebookState();
+      nativeStored = JSON.parse(state.activityMetaJson || "{}");
+    } catch {}
+    try {
+      return { ...stored, ...JSON.parse(localStorage.getItem(LS_ACTIVITY_META_KEY) || "{}"), ...nativeStored };
     } catch {
-      return stored;
+      return { ...stored, ...nativeStored };
     }
   }
 
@@ -524,6 +556,7 @@
     try {
       localStorage.setItem(LS_ACTIVITY_META_KEY, JSON.stringify(meta || {}));
     } catch {}
+    await _saveNativeNotebookState({ meta });
     try {
       const db = await _openDb();
       return new Promise((resolve, reject) => {
