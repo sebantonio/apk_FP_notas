@@ -58,9 +58,24 @@
     } catch { return false; }
   }
 
+  function _arrayToBase64(bytes) {
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    return btoa(binary);
+  }
+
   function _saveToStorage() {
-    // Deshabilitado: XLSX.write es síncrono y bloquea el hilo principal en Android WebView
-    // El workbook se mantiene en _workbook durante la sesión
+    if (!_workbook) return;
+    try {
+      const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
+      localStorage.setItem(DATA_KEY, _arrayToBase64(new Uint8Array(wbout)));
+    } catch (err) {
+      console.warn("No se pudo guardar el Excel en el almacenamiento local.", err);
+    }
   }
 
   // Descarga el xlsx actual al dispositivo
@@ -130,24 +145,18 @@
       };
 
       let resolved = false;
-      let focusTimer = null;
-
-      const onFocus = () => {
-        window.removeEventListener("focus", onFocus);
-        focusTimer = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            cleanup();
-            resolve(null);
-          }
-        }, 1000);
-      };
+      const cancelTimer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          resolve(null);
+        }
+      }, 60000);
 
       input.addEventListener("change", async () => {
         if (resolved) return;
         resolved = true;
-        window.removeEventListener("focus", onFocus);
-        if (focusTimer) clearTimeout(focusTimer);
+        clearTimeout(cancelTimer);
         const file = input.files && input.files[0];
         cleanup();
         if (!file) { resolve(null); return; }
@@ -157,18 +166,22 @@
           _fileName = file.name;
           localStorage.setItem(FILE_KEY, _fileName);
           const result = _buildResult();
+          _saveToStorage();
           resolve(result);
-          setTimeout(() => _saveToStorage(), 0);
         } catch(e) {
           resolve(null);
         }
       });
 
-      input.click();
+      input.addEventListener("cancel", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(cancelTimer);
+        cleanup();
+        resolve(null);
+      });
 
-      setTimeout(() => {
-        window.addEventListener("focus", onFocus);
-      }, 800);
+      input.click();
     });
   }
 
