@@ -175,10 +175,10 @@
 
   function _activityDefinitions() {
     return [
-      { key: "practicas", label: "Practicas", match: ["PRACTICA", "PRÁCTICA"] },
-      { key: "memorias", label: "Memorias", match: ["MEMORIA"] },
-      { key: "otros", label: "Otras actividades", match: ["OTRAS", "OTROS"] },
-      { key: "controles", label: "Controles", match: ["CONTROL"] },
+      { key: "practicas", label: "Practicas", match: ["PRACTICA", "PRÁCTICA", "PRÁCTICAS", "PRACTICAS"], notaOffset: 4 },
+      { key: "memorias", label: "Memorias", match: ["MEMORIA", "MEMORIAS"], notaOffset: 3 },
+      { key: "otros", label: "Otras actividades", match: ["OTROS INSTRUMENTOS", "O.INSTRU", "OTRAS", "OTROS", "O.I"], notaOffset: 3 },
+      { key: "controles", label: "Controles", match: ["CONTROL", "CONTROLES", "PRUEBA"], notaOffset: 3 },
     ];
   }
 
@@ -186,40 +186,107 @@
     return _activityDefinitions().find((item) => item.key === tipo) || _activityDefinitions()[0];
   }
 
-  function _findActivityHeaderRow(rows, tipo) {
-    const definition = _activityDefinition(tipo);
-    let sectionRow = -1;
-    for (let rowIdx = 0; rowIdx < rows.length; rowIdx += 1) {
-      const rowText = (rows[rowIdx] || []).map((cell) => String(cell || "").toUpperCase()).join(" ");
-      if (definition.match.some((term) => rowText.includes(term))) {
-        sectionRow = rowIdx;
-        break;
-      }
-    }
+  function _matchesType(text, definition) {
+    const upper = text.toUpperCase();
+    return definition.match.some((term) => upper.includes(term.toUpperCase()));
+  }
 
-    const start = sectionRow >= 0 ? sectionRow : 0;
-    for (let rowIdx = start; rowIdx < Math.min(rows.length, start + 25); rowIdx += 1) {
+  // Detecta la estructura de bloques de actividades en la hoja unidad.
+  // Devuelve { sheetName, tipoColMap, primeraFilaBloque, alturaBloque }
+  // tipoColMap: { practicas: colIdx, memorias: colIdx, otros: colIdx, controles: colIdx }
+  function _detectActivityLayout(unidad) {
+    const unitSheet = _unitSheetName(unidad);
+    const rows = _rows(unitSheet);
+    const defs = _activityDefinitions();
+
+    // Buscar la fila donde col A contiene "practicas" Y la fila siguiente tiene "N°" en col A.
+    // Esto distingue los bloques reales de las filas de resumen.
+    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
       const row = rows[rowIdx] || [];
-      if (row.some((cell) => /^Act\d+/i.test(String(cell || "").trim()))) {
-        return rowIdx;
+      const aCell = String(row[0] || "");
+      if (!_matchesType(aCell, defs[0])) continue;
+
+      // Verificar que la fila siguiente tiene "N°" o "N" en col A (cabecera del bloque)
+      const nextRow = rows[rowIdx + 1] || [];
+      const nextA = String(nextRow[0] || "").trim().toUpperCase();
+      if (!nextA.startsWith("N")) continue; // No es un bloque real, es resumen
+
+      // Esta fila es el inicio del primer bloque. Buscar otros tipos en la misma fila.
+      const tipoColMap = { practicas: 0 };
+      for (let colIdx = 1; colIdx < row.length; colIdx++) {
+        const cellText = String(row[colIdx] || "");
+        if (!cellText.trim()) continue;
+        for (const def of defs.slice(1)) {
+          if (_matchesType(cellText, def) && tipoColMap[def.key] === undefined) {
+            tipoColMap[def.key] = colIdx;
+          }
+        }
       }
+
+      // Calcular altura del bloque: buscar siguiente bloque del mismo tipo practicas
+      let alturaBloque = 44; // valor por defecto
+      for (let r2 = rowIdx + 1; r2 < Math.min(rows.length, rowIdx + 100); r2++) {
+        const r2cell = String((rows[r2] || [])[0] || "");
+        if (_matchesType(r2cell, defs[0])) {
+          alturaBloque = r2 - rowIdx;
+          break;
+        }
+      }
+
+      return { sheetName: unitSheet, rows, tipoColMap, primeraFilaBloque: rowIdx, alturaBloque };
     }
 
-    return rows.findIndex((row) =>
-      (row || []).some((cell) => /^Act\d+/i.test(String(cell || "").trim()))
-    );
+    return { sheetName: unitSheet, rows, tipoColMap: { practicas: 0 }, primeraFilaBloque: 0, alturaBloque: 44 };
+  }
+
+  // Devuelve el colIdx de inicio de un tipo en su layout
+  function _tipoColIdx(tipoColMap, tipo) {
+    if (tipoColMap[tipo] !== undefined) return tipoColMap[tipo];
+    // Si el tipo no se encontró, devolver 0 (practicas)
+    return 0;
+  }
+
+  // Devuelve todos los bloques de un tipo: [{ numero, nombre, incluida, filaInicio }]
+  function _getActivityBlocks(rows, tipoColIdx, primeraFilaBloque, alturaBloque) {
+    const blocks = [];
+    for (let filaInicio = primeraFilaBloque; filaInicio < rows.length; filaInicio += alturaBloque) {
+      const titleRow = rows[filaInicio] || [];
+      const titleCell = String(titleRow[tipoColIdx] || "");
+      if (!titleCell.trim()) break;
+
+      const numRow = rows[filaInicio + 1] || [];
+      const numero = Number(numRow[tipoColIdx + 1]) || (blocks.length + 1);
+      const nombre = String(numRow[tipoColIdx + 2] || ""); // columna NOMBRE
+
+      const inclRow = rows[filaInicio + 2] || [];
+      const inclCell = String(inclRow[tipoColIdx + 1] || "").toUpperCase().trim();
+      const incluida = inclCell === "X" || inclCell === "x" || inclCell === "SI" || inclCell === "SÍ" || inclCell === "S";
+
+      blocks.push({ numero, nombre, incluida, filaInicio });
+    }
+    return blocks;
   }
 
   function _activitySheetRows(unidad, tipo) {
+    // Compatibilidad: intentar hoja separada primero
     const splitSheet = _activitySheetName(unidad, tipo);
     try {
       const rows = _rows(splitSheet);
-      return { sheetName: splitSheet, rows, headerRowIdx: _findActivityHeaderRow(rows, tipo) };
+      const defs = _activityDefinitions();
+      const def = _activityDefinition(tipo);
+      let headerRowIdx = -1;
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i] || [];
+        if (row.some((cell) => /^Act\d+/i.test(String(cell || "").trim()))) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+      return { sheetName: splitSheet, rows, headerRowIdx };
     } catch {}
 
-    const unitSheet = _unitSheetName(unidad);
-    const rows = _rows(unitSheet);
-    return { sheetName: unitSheet, rows, headerRowIdx: _findActivityHeaderRow(rows, tipo) };
+    const layout = _detectActivityLayout(unidad);
+    return { sheetName: layout.sheetName, rows: layout.rows, headerRowIdx: -1, layout };
   }
 
   function _readPartialWorkbook(sheetNames) {
@@ -635,23 +702,30 @@
     const unidades = _getUnidades();
     const tipos = _getTiposActividad(unidad);
     const rraaData = includeRraa ? _getRraaCriterios() : { rraa: [], criterios: [], ponderacionesUnidad: [] };
-    const activitySheet = _activitySheetRows(unidad, tipo);
-    const hoja = activitySheet.sheetName;
-    const col = `Act${actividad}`;
-    let rows = [];
     let notas = [];
 
     try {
-      rows = activitySheet.rows;
-      const headerRowIdx = activitySheet.headerRowIdx >= 0 ? activitySheet.headerRowIdx : 0;
-      const header = rows[headerRowIdx] || [];
-      const colIdx = header.findIndex((cell) => String(cell || "").trim().toLowerCase() === col.toLowerCase());
-      notas = rows.slice(headerRowIdx + 1).map((row, idx) => ({
-        numero: row[0] || idx + 1,
-        nombre: row[1] || row[2] || "",
-        nota: colIdx >= 0 && row[colIdx] !== undefined ? row[colIdx] : "",
-        rowIdx: headerRowIdx + idx + 1,
-      })).filter(item => item.nombre);
+      const layout = _detectActivityLayout(unidad);
+      const colIdx = _tipoColIdx(layout.tipoColMap, tipo);
+      const def = _activityDefinition(tipo);
+      const notaOffset = def.notaOffset !== undefined ? def.notaOffset : 4;
+      const blocks = _getActivityBlocks(layout.rows, colIdx, layout.primeraFilaBloque, layout.alturaBloque);
+      const block = blocks.find((b) => Number(b.numero) === Number(actividad));
+      if (block) {
+        const alumnosStartRow = block.filaInicio + 4;
+        const notaColIdx = colIdx + notaOffset;
+        for (let r = alumnosStartRow; r < block.filaInicio + layout.alturaBloque; r++) {
+          const row = layout.rows[r] || [];
+          const nombre = String(row[colIdx] || "").trim();
+          if (!nombre) continue;
+          notas.push({
+            numero: r - alumnosStartRow + 1,
+            nombre,
+            nota: row[notaColIdx] !== undefined && row[notaColIdx] !== "" ? row[notaColIdx] : "",
+            rowIdx: r,
+          });
+        }
+      }
     } catch {
       notas = _getAlumnos().map((alumno, idx) => ({
         numero: alumno.numero || idx + 1,
@@ -661,8 +735,8 @@
       }));
     }
 
-    const type = tipos.find(item => item.key === tipo) || tipos[0] || { actividades: [] };
-    const block = (type.actividades || []).find(item => Number(item.numero) === Number(actividad)) || {
+    const type = tipos.find((item) => item.key === tipo) || tipos[0] || { actividades: [] };
+    const block = (type.actividades || []).find((item) => Number(item.numero) === Number(actividad)) || {
       numero: actividad,
       nombre: "",
       incluida: true,
@@ -687,17 +761,31 @@
   }
 
   function _getTiposActividad(unidad) {
+    let layout = null;
+    try { layout = _detectActivityLayout(unidad); } catch { layout = null; }
+
     return _activityDefinitions().map((definition) => {
       let actividades = [];
       try {
-        const sheetData = _activitySheetRows(unidad, definition.key);
-        const header = sheetData.rows[sheetData.headerRowIdx >= 0 ? sheetData.headerRowIdx : 0] || [];
-        actividades = header
-          .map((value) => {
-            const match = String(value || "").match(/^Act(\d+)/i);
-            return match ? { numero: Number(match[1]), nombre: "", incluida: true } : null;
-          })
-          .filter(Boolean);
+        if (layout && layout.tipoColMap[definition.key] !== undefined) {
+          const colIdx = layout.tipoColMap[definition.key];
+          const blocks = _getActivityBlocks(layout.rows, colIdx, layout.primeraFilaBloque, layout.alturaBloque);
+          actividades = blocks.map((b) => ({ numero: b.numero, nombre: b.nombre, incluida: b.incluida }));
+        } else {
+          // Intentar hoja separada
+          const splitSheet = _activitySheetName(unidad, definition.key);
+          const splitRows = _rows(splitSheet);
+          const headerIdx = splitRows.findIndex((row) =>
+            (row || []).some((cell) => /^Act\d+/i.test(String(cell || "").trim()))
+          );
+          const header = splitRows[headerIdx >= 0 ? headerIdx : 0] || [];
+          actividades = header
+            .map((value) => {
+              const match = String(value || "").match(/^Act(\d+)/i);
+              return match ? { numero: Number(match[1]), nombre: "", incluida: true } : null;
+            })
+            .filter(Boolean);
+        }
       } catch {
         actividades = [];
       }
@@ -705,24 +793,28 @@
       return {
         ...definition,
         total: actividades.length,
-        incluidas: actividades.filter(item => item.incluida).length,
+        incluidas: actividades.filter((item) => item.incluida).length,
         actividades,
       };
     });
   }
 
   function _saveNotasActividad({ unidad, tipo, actividad, notas }) {
-    const activitySheet = _activitySheetRows(unidad, tipo);
-    const hoja = activitySheet.sheetName;
+    const layout = _detectActivityLayout(unidad);
+    const hoja = layout.sheetName;
     const ws = _sheet(hoja);
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-    const headerRowIdx = activitySheet.headerRowIdx >= 0 ? activitySheet.headerRowIdx : 0;
-    const header = rows[headerRowIdx] || [];
-    const colIdx = header.indexOf(`Act${actividad}`);
-    if (colIdx < 0) throw new Error(`Columna Act${actividad} no encontrada en ${hoja}`);
-    notas.forEach((n, i) => {
-      const cell = XLSX.utils.encode_cell({ r: headerRowIdx + i + 1, c: colIdx });
-      ws[cell] = { v: n.nota === "" ? "" : Number(n.nota), t: n.nota === "" ? "s" : "n" };
+    const colIdx = _tipoColIdx(layout.tipoColMap, tipo);
+    const def = _activityDefinition(tipo);
+    const notaOffset = def.notaOffset !== undefined ? def.notaOffset : 4;
+    const notaColIdx = colIdx + notaOffset;
+    const blocks = _getActivityBlocks(layout.rows, colIdx, layout.primeraFilaBloque, layout.alturaBloque);
+    const block = blocks.find((b) => Number(b.numero) === Number(actividad));
+    if (!block) throw new Error(`Actividad ${actividad} no encontrada en ${hoja}`);
+    notas.forEach((n) => {
+      if (n.rowIdx !== undefined) {
+        const cell = XLSX.utils.encode_cell({ r: n.rowIdx, c: notaColIdx });
+        ws[cell] = { v: n.nota === "" ? "" : Number(n.nota), t: n.nota === "" ? "s" : "n" };
+      }
     });
     _clearRowsCache(hoja);
     _downloadWorkbook();
@@ -819,19 +911,69 @@
     addActividad: async (payload) => {
       const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
-      const activitySheet = _activitySheetRows(payload.unidad, payload.tipo);
-      const hoja = activitySheet.sheetName;
+      const layout = _detectActivityLayout(payload.unidad);
+      const hoja = layout.sheetName;
       const ws = wb.Sheets[hoja];
       if (!ws) throw new Error(`Hoja ${hoja} no encontrada`);
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-      const headerRowIdx = activitySheet.headerRowIdx >= 0 ? activitySheet.headerRowIdx : 0;
-      rows[headerRowIdx] = rows[headerRowIdx] || [];
-      const actividades = _getTiposActividad(payload.unidad)
-        .find((item) => item.key === payload.tipo)?.actividades || [];
-      const numero = Number(payload.numero) || (Math.max(0, ...actividades.map((item) => Number(item.numero) || 0)) + 1);
-      rows[headerRowIdx].push(`Act${numero}`);
-      rows.slice(headerRowIdx + 1).forEach(r => r.push(""));
-      wb.Sheets[hoja] = XLSX.utils.aoa_to_sheet(rows);
+      const colIdx = _tipoColIdx(layout.tipoColMap, payload.tipo);
+      const blocks = _getActivityBlocks(layout.rows, colIdx, layout.primeraFilaBloque, layout.alturaBloque);
+      const numero = Number(payload.numero) || (Math.max(0, ...blocks.map((b) => Number(b.numero) || 0)) + 1);
+      const def = _activityDefinition(payload.tipo);
+
+      // Calcular dónde insertar el nuevo bloque (al final de los bloques existentes)
+      let nuevaFilaInicio;
+      if (blocks.length > 0) {
+        const ultimoBloque = blocks[blocks.length - 1];
+        nuevaFilaInicio = ultimoBloque.filaInicio + layout.alturaBloque;
+      } else {
+        nuevaFilaInicio = layout.primeraFilaBloque;
+      }
+
+      // Copiar estructura del último bloque o el primero como plantilla
+      const plantilla = blocks.length > 0 ? blocks[blocks.length - 1] : blocks[0];
+      if (!plantilla) throw new Error(`No hay bloques existentes para copiar en ${hoja}`);
+
+      // Copiar bloque plantilla al nuevo lugar escribiendo celda a celda (no reescribir toda la hoja)
+      const notaOffset = def.notaOffset !== undefined ? def.notaOffset : 4;
+      const endCol = colIdx + Math.max(notaOffset + 1, 20);
+
+      function _writeCell(ws, r, c, v) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        if (v === "" || v === undefined || v === null) {
+          ws[cellRef] = { v: "", t: "s" };
+        } else if (typeof v === "number") {
+          ws[cellRef] = { v, t: "n" };
+        } else {
+          ws[cellRef] = { v: String(v), t: "s" };
+        }
+      }
+
+      // Copiar estructura del bloque plantilla al nuevo lugar
+      for (let offset = 0; offset < layout.alturaBloque; offset++) {
+        const srcRow = layout.rows[plantilla.filaInicio + offset] || [];
+        const dstRowIdx = nuevaFilaInicio + offset;
+        for (let c = colIdx; c < Math.min(srcRow.length, endCol); c++) {
+          _writeCell(ws, dstRowIdx, c, srcRow[c]);
+        }
+      }
+
+      // Actualizar N° con el nuevo número
+      _writeCell(ws, nuevaFilaInicio + 1, colIdx + 1, numero);
+      // Actualizar INCLUIDO
+      _writeCell(ws, nuevaFilaInicio + 2, colIdx + 1, payload.incluida !== false ? "x" : "");
+      // Limpiar notas de alumnos
+      for (let offset = 4; offset < layout.alturaBloque; offset++) {
+        _writeCell(ws, nuevaFilaInicio + offset, colIdx + notaOffset, "");
+      }
+
+      // Actualizar !ref si es necesario
+      const ref = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
+      const newMaxRow = nuevaFilaInicio + layout.alturaBloque - 1;
+      const newMaxCol = endCol - 1;
+      if (newMaxRow > ref.e.r) ref.e.r = newMaxRow;
+      if (newMaxCol > ref.e.c) ref.e.c = newMaxCol;
+      ws["!ref"] = XLSX.utils.encode_range(ref);
+
       _clearRowsCache(hoja);
       _downloadWorkbook();
       return _getNotasActividad({ unidad: payload.unidad, tipo: payload.tipo, actividad: numero, includeRraa: false });
