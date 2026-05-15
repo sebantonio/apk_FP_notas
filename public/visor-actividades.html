@@ -1,0 +1,944 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notas de Actividades</title>
+    <script src="xlsx.full.min.js"></script><script src="app-bridge.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            padding: 20px;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: #1f2937;
+            background: #f3f6fb;
+        }
+
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+            overflow: hidden;
+            background: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 14px 42px rgba(31, 41, 55, 0.16);
+        }
+
+        .page-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f8f9ff;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .nav-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .nav-button,
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.92em;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .nav-button {
+            color: #6366f1;
+            background: #ffffff;
+            border: 2px solid #6366f1;
+            cursor: pointer;
+        }
+
+        .nav-link {
+            color: #ffffff;
+            background: #6366f1;
+            border: 2px solid #6366f1;
+        }
+
+        .header {
+            padding: 28px 30px;
+            color: #ffffff;
+            background: #3730a3;
+        }
+
+        .header h1 {
+            margin-bottom: 6px;
+            font-size: 2em;
+            letter-spacing: 0;
+        }
+
+        .header p {
+            opacity: 0.92;
+        }
+
+        .content {
+            padding: 24px;
+        }
+
+        .message {
+            display: none;
+            margin-bottom: 16px;
+            padding: 13px 16px;
+            border-radius: 6px;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.info {
+            color: #0c5460;
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+
+        .message.error {
+            color: #721c24;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+
+        .toolbar {
+            display: grid;
+            grid-template-columns: minmax(180px, 260px) minmax(220px, 280px) minmax(240px, 1fr) auto;
+            gap: 12px;
+            align-items: end;
+            margin-bottom: 18px;
+            padding: 16px;
+            background: #f8f9ff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #4b5563;
+            font-size: 0.88em;
+            font-weight: 700;
+        }
+
+        select,
+        input {
+            width: 100%;
+            min-height: 40px;
+            padding: 8px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font: inherit;
+            background: #ffffff;
+        }
+
+        button {
+            min-height: 40px;
+            padding: 9px 16px;
+            color: #ffffff;
+            font: inherit;
+            font-weight: 700;
+            background: #6366f1;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button:disabled,
+        select:disabled,
+        input:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .stat {
+            padding: 14px;
+            background: #f8f9ff;
+            border-left: 4px solid #6366f1;
+            border-radius: 8px;
+        }
+
+        .stat span {
+            display: block;
+            margin-bottom: 4px;
+            color: #6b7280;
+            font-size: 0.86em;
+        }
+
+        .stat strong {
+            color: #4338ca;
+            font-size: 1.28em;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            max-height: 58vh;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            min-width: 980px;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        th,
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            color: #ffffff;
+            background: #6366f1;
+        }
+
+        .student-col {
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            width: 280px;
+            background: #ffffff;
+        }
+
+        th.student-col {
+            z-index: 3;
+            background: #4338ca;
+        }
+
+        tr:hover td {
+            background: #f8f9ff;
+        }
+
+        .activity-col {
+            width: 138px;
+            text-align: center;
+        }
+
+        .activity-head {
+            display: grid;
+            gap: 3px;
+            line-height: 1.15;
+        }
+
+        .activity-head span {
+            font-size: 0.78em;
+            opacity: 0.86;
+        }
+
+        .grade {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 44px;
+            min-height: 30px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-weight: 800;
+        }
+
+        .grade.ok {
+            color: #166534;
+            background: #dcfce7;
+        }
+
+        .grade.warn {
+            color: #92400e;
+            background: #fef3c7;
+        }
+
+        .grade.bad {
+            color: #991b1b;
+            background: #fee2e2;
+        }
+
+        .grade.empty {
+            color: #6b7280;
+            background: #f3f4f6;
+        }
+
+        .empty-row {
+            padding: 28px;
+            color: #6b7280;
+            text-align: center;
+        }
+
+        /* --- Botón RA en cabecera actividad --- */
+        .btn-ra-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 5px;
+            min-height: unset;
+            height: 22px;
+            padding: 0 8px;
+            font-size: 0.72em;
+            font-weight: 700;
+            background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.55);
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .btn-ra-toggle.active {
+            background: white;
+            color: #6366f1;
+        }
+
+        /* --- Panel RA --- */
+        .ra-panel {
+            margin-bottom: 18px;
+            border: 2px solid #6366f1;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .ra-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: #6366f1;
+            color: white;
+            font-weight: 700;
+            font-size: 0.95em;
+        }
+
+        .ra-panel-close {
+            min-height: unset;
+            height: 26px;
+            padding: 0 10px;
+            font-size: 0.8em;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .ra-panel-table-wrap {
+            overflow-x: auto;
+            max-height: 40vh;
+        }
+
+        .ra-panel-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+
+        .ra-panel-table th {
+            position: sticky;
+            top: 0;
+            padding: 9px 14px;
+            background: #4338ca;
+            color: white;
+            font-size: 0.85em;
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        .ra-panel-table th.ra-student-col {
+            text-align: left;
+            min-width: 200px;
+        }
+
+        .ra-panel-table td {
+            padding: 8px 14px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 0.88em;
+        }
+
+        .ra-panel-table td.ra-student-name {
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .ra-panel-table tr:hover td {
+            background: #f0f4ff;
+        }
+
+        @media (max-width: 850px) {
+            body {
+                padding: 10px;
+            }
+
+            .content {
+                padding: 16px;
+            }
+
+            .toolbar {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="page-nav" aria-label="Navegacion">
+            <div class="nav-group">
+                <button class="nav-button" type="button" onclick="window.history.back()">Atras</button>
+                <a class="nav-link" href="index.html">Inicio</a>
+            </div>
+            <div class="nav-group">
+                <a class="nav-link" href="gestor-notas.html">Anadir notas</a>
+                <a class="nav-link" href="visor-notas.html">RRAA y CCEE</a>
+            </div>
+        </nav>
+
+        <header class="header">
+            <h1>Notas de actividades</h1>
+            <p>Consulta practicas, memorias, otras actividades y controles por unidad.</p>
+        </header>
+
+        <main class="content">
+            <div id="message" class="message"></div>
+
+            <section class="toolbar" aria-label="Filtros">
+                <div>
+                    <label for="unidadSelect">Unidad</label>
+                    <select id="unidadSelect"></select>
+                </div>
+                <div>
+                    <label for="tipoSelect">Tipo</label>
+                    <select id="tipoSelect">
+                        <option value="practicas">Practicas</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="searchInput">Buscar alumno</label>
+                    <input id="searchInput" type="search" placeholder="Nombre del alumno">
+                </div>
+                <button type="button" id="reloadButton">Recargar</button>
+            </section>
+
+            <section class="stats" aria-label="Resumen">
+                <div class="stat">
+                    <span>Archivo</span>
+                    <strong id="fileName">-</strong>
+                </div>
+                <div class="stat">
+                    <span>Unidad</span>
+                    <strong id="unitName">-</strong>
+                </div>
+                <div class="stat">
+                    <span>Alumnos</span>
+                    <strong id="studentCount">0</strong>
+                </div>
+                <div class="stat">
+                    <span>Actividades</span>
+                    <strong id="activityCount">0</strong>
+                </div>
+                <div class="stat">
+                    <span>Notas registradas</span>
+                    <strong id="gradedCount">0</strong>
+                </div>
+                <div class="stat">
+                    <span>Media visible</span>
+                    <strong id="averageGrade">-</strong>
+                </div>
+            </section>
+
+            <div id="raPanel" class="ra-panel" style="display:none" aria-label="Notas por RA"></div>
+
+            <section class="table-wrap" aria-label="Tabla de notas de actividades">
+                <table>
+                    <thead id="notesHead"></thead>
+                    <tbody id="notesBody">
+                        <tr><td class="empty-row">Cargando datos...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const TYPE_LABELS = {
+            practicas: "Practicas",
+            memorias: "Memorias",
+            otros: "Otras actividades",
+            controles: "Controles"
+        };
+
+        let state = null;
+        const typeCache = new Map();
+        let loadToken = 0;
+        let expandedActivityKey = null;
+
+        const messageBox = document.getElementById("message");
+        const unidadSelect = document.getElementById("unidadSelect");
+        const tipoSelect = document.getElementById("tipoSelect");
+        const searchInput = document.getElementById("searchInput");
+        const reloadButton = document.getElementById("reloadButton");
+        const notesHead = document.getElementById("notesHead");
+        const notesBody = document.getElementById("notesBody");
+        const fileName = document.getElementById("fileName");
+        const unitName = document.getElementById("unitName");
+        const studentCount = document.getElementById("studentCount");
+        const activityCount = document.getElementById("activityCount");
+        const gradedCount = document.getElementById("gradedCount");
+        const averageGrade = document.getElementById("averageGrade");
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (!window.electronExcel) {
+                showMessage("Abre esta pantalla desde la aplicacion local.", "error");
+                setDisabled(true);
+                return;
+            }
+
+            reloadButton.addEventListener("click", () => loadType({ force: true }));
+            unidadSelect.addEventListener("change", () => loadType());
+            tipoSelect.addEventListener("change", () => loadType());
+            searchInput.addEventListener("input", () => { renderTable(); renderRaPanel(); });
+            loadInitial();
+        });
+
+        async function loadInitial() {
+            try {
+                setDisabled(true);
+                showMessage("Leyendo U1, practicas y primer alumno...", "info");
+                const data = await window.electronExcel.getNotasActividad({
+                    unidad: "U1",
+                    tipo: "practicas",
+                    actividad: 1,
+                    maxAlumnos: 1
+                });
+
+                if (!data) {
+                    showMessage("No se encontro ningun Excel seleccionado.", "error");
+                    return;
+                }
+
+                renderUnitSelect(data.unidades || [], data.unidad);
+                renderTypeSelect(data.tipos || []);
+                state = buildTypeStateFromActivities(data, [{
+                    tipo: data.tipo,
+                    tipoLabel: getTypeLabel(data, data.tipo),
+                    numero: data.actividad,
+                    nombre: data.block && data.block.nombre ? data.block.nombre : "",
+                    incluida: Boolean(data.block && data.block.incluida),
+                    notas: data.notas || []
+                }]);
+                renderAll();
+                showMessage("Primera practica lista. Cargando el tipo completo...", "info");
+                await loadType({ force: true, seed: data });
+            } catch (error) {
+                showMessage(error.message || "No se pudieron cargar las unidades.", "error");
+            } finally {
+                setDisabled(false);
+            }
+        }
+
+        async function loadType(options = {}) {
+            const unidad = unidadSelect.value || "U1";
+            const tipo = tipoSelect.value || "practicas";
+            const cacheKey = `${unidad}:${tipo}`;
+            const token = ++loadToken;
+
+            try {
+                setDisabled(true);
+                if (!options.force && typeCache.has(cacheKey)) {
+                    state = typeCache.get(cacheKey);
+                    renderControls(state);
+                    renderAll();
+                    showMessage("Tipo de actividades cargado desde cache.", "success");
+                    return;
+                }
+
+                showMessage("Leyendo primera actividad del tipo seleccionado...", "info");
+                const firstData = await window.electronExcel.getNotasActividad({
+                    unidad: options.seed ? options.seed.unidad : unidad,
+                    tipo: options.seed ? options.seed.tipo : tipo,
+                    actividad: 1
+                });
+
+                if (!firstData) {
+                    showMessage("No se encontro ningun Excel seleccionado.", "error");
+                    return;
+                }
+
+                const firstActivity = buildActivityFromData(firstData);
+                const activities = firstActivity ? [firstActivity] : [];
+                state = buildTypeStateFromActivities(firstData, activities);
+                typeCache.set(`${state.unidad}:${state.tipo}`, state);
+                renderControls(state);
+                renderAll();
+                showMessage("Primera actividad cargada. Leyendo el tipo completo...", "info");
+                setDisabled(false);
+                loadTypeBatchInBackground(firstData, token);
+            } catch (error) {
+                showMessage(error.message || "No se pudieron cargar las actividades.", "error");
+            } finally {
+                if (token === loadToken) {
+                    setDisabled(false);
+                }
+            }
+        }
+
+        function renderControls(data) {
+            renderUnitSelect(data.unidades || [], data.unidad);
+            renderTypeSelect(data.tipos || [], data.tipo);
+        }
+
+        async function loadTypeBatchInBackground(firstData, token) {
+            try {
+                const data = await window.electronExcel.getNotasActividadesTipo({
+                    unidad: firstData.unidad,
+                    tipo: firstData.tipo
+                });
+
+                if (token !== loadToken || !data) {
+                    return;
+                }
+
+                state = buildTypeStateFromActivities(data, data.activities || []);
+                typeCache.set(`${state.unidad}:${state.tipo}`, state);
+                renderControls(state);
+                renderAll();
+                showMessage("Notas del tipo seleccionado cargadas.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudo cargar el tipo completo.", "error");
+            }
+        }
+
+        function buildActivityFromData(data, fallbackBlock = null) {
+            const block = data.block || fallbackBlock;
+
+            if (!block) {
+                return null;
+            }
+
+            return {
+                tipo: data.tipo,
+                tipoLabel: getTypeLabel(data, data.tipo),
+                numero: data.actividad || block.numero,
+                nombre: block.nombre || "",
+                incluida: Boolean(block.incluida),
+                notas: data.notas || []
+            };
+        }
+
+        function buildTypeStateFromActivities(baseData, activities) {
+            return {
+                fileName: baseData.fileName,
+                unidad: baseData.unidad,
+                unidades: baseData.unidades || [],
+                tipos: baseData.tipos || [],
+                tipo: baseData.tipo,
+                activities,
+                alumnos: buildStudents(activities)
+            };
+        }
+
+        function buildStudents(activities) {
+            const students = new Map();
+
+            activities.forEach((activity) => {
+                activity.notas.forEach((note) => {
+                    const key = note.nombre || `Alumno ${note.numero}`;
+                    if (!students.has(key)) {
+                        students.set(key, {
+                            nombre: key,
+                            numero: note.numero,
+                            notas: {}
+                        });
+                    }
+
+                    students.get(key).notas[activityKey(activity)] = note.nota;
+                });
+            });
+
+            return Array.from(students.values()).sort((a, b) => {
+                const byNumber = Number(a.numero || 0) - Number(b.numero || 0);
+                return byNumber || a.nombre.localeCompare(b.nombre, "es");
+            });
+        }
+
+        function renderAll() {
+            if (!state) {
+                return;
+            }
+
+            const alumnos = getVisibleStudents();
+            const values = [];
+            const activities = state.activities || [];
+
+            alumnos.forEach((alumno) => {
+                activities.forEach((activity) => {
+                    const numeric = parseGrade(alumno.notas[activityKey(activity)]);
+                    if (numeric !== null) {
+                        values.push(numeric);
+                    }
+                });
+            });
+
+            fileName.textContent = state.fileName || "-";
+            unitName.textContent = getUnitLabel(state.unidad);
+            studentCount.textContent = alumnos.length;
+            activityCount.textContent = activities.length;
+            gradedCount.textContent = values.length;
+            averageGrade.textContent = values.length ? formatGrade(values.reduce((total, value) => total + value, 0) / values.length) : "-";
+            renderTable();
+        }
+
+        function renderTable() {
+            if (!state) {
+                return;
+            }
+
+            const alumnos = getVisibleStudents();
+            const activities = state.activities || [];
+
+            notesHead.innerHTML = `
+                <tr>
+                    <th class="student-col">Alumno</th>
+                    ${activities.map((activity) => {
+                        const key = activityKey(activity);
+                        const isActive = key === expandedActivityKey;
+                        const hasCe = activity.notas.some((n) => n.ceNotas && Object.keys(n.ceNotas).length > 0);
+                        return `
+                        <th class="activity-col">
+                            <span class="activity-head">
+                                <strong>${escapeHtml(shortTypeLabel(activity.tipoLabel))} ${escapeHtml(activity.numero)}</strong>
+                                <span>${escapeHtml(activity.nombre || "Sin nombre")}</span>
+                            </span>
+                            ${hasCe ? `<button class="btn-ra-toggle${isActive ? " active" : ""}" type="button" onclick="toggleRaPanel('${key}')" title="Ver notas por RA">&#9660; RA</button>` : ""}
+                        </th>`;
+                    }).join("")}
+                </tr>
+            `;
+
+            if (!activities.length) {
+                notesBody.innerHTML = `<tr><td class="empty-row" colspan="2">No hay actividades de este tipo en la unidad.</td></tr>`;
+                return;
+            }
+
+            if (!alumnos.length) {
+                notesBody.innerHTML = `<tr><td class="empty-row" colspan="${activities.length + 1}">No hay alumnos para mostrar.</td></tr>`;
+                return;
+            }
+
+            notesBody.innerHTML = alumnos.map((alumno) => `
+                <tr>
+                    <td class="student-col">${escapeHtml(alumno.nombre)}</td>
+                    ${activities.map((activity) => `<td class="activity-col">${gradeBadge(alumno.notas[activityKey(activity)])}</td>`).join("")}
+                </tr>
+            `).join("");
+        }
+
+        function renderUnitSelect(unidades, selected) {
+            unidadSelect.innerHTML = (unidades || []).map((unidad) => `
+                <option value="${escapeHtml(unidad.codigo)}"${String(unidad.codigo) === String(selected) ? " selected" : ""}>
+                    ${escapeHtml(unidad.label || unidad.codigo)}
+                </option>
+            `).join("");
+        }
+
+        function renderTypeSelect(tipos, selectedValue) {
+            const selected = selectedValue || tipoSelect.value || "practicas";
+            tipoSelect.innerHTML = `${(tipos || []).map((tipo) => `
+                <option value="${escapeHtml(tipo.key)}">${escapeHtml(tipo.label || TYPE_LABELS[tipo.key] || tipo.key)} (${tipo.total || 0})</option>
+            `).join("")}`;
+            tipoSelect.value = Array.from(tipoSelect.options).some((option) => option.value === selected) ? selected : "practicas";
+        }
+
+        function getVisibleStudents() {
+            const query = normalize(searchInput.value);
+            return (state.alumnos || []).filter((alumno) => !query || normalize(alumno.nombre).includes(query));
+        }
+
+        function getUnitLabel(codigo) {
+            const unit = (state.unidades || []).find((item) => item.codigo === codigo);
+            return unit ? (unit.label || unit.codigo) : codigo;
+        }
+
+        function getTypeLabel(data, tipoKey) {
+            const type = (data.tipos || []).find((item) => item.key === tipoKey);
+            return type ? type.label : TYPE_LABELS[tipoKey] || tipoKey;
+        }
+
+        function activityKey(activity) {
+            return `${activity.tipo}:${activity.numero}`;
+        }
+
+        function getRaFromCode(code) {
+            const m = String(code || "").match(/^(\d+)\./);
+            return m ? parseInt(m[1], 10) : null;
+        }
+
+        function toggleRaPanel(key) {
+            expandedActivityKey = expandedActivityKey === key ? null : key;
+            renderTable();
+            renderRaPanel();
+        }
+
+        function renderRaPanel() {
+            const panel = document.getElementById("raPanel");
+            if (!expandedActivityKey || !state) {
+                panel.style.display = "none";
+                return;
+            }
+
+            const activity = (state.activities || []).find((a) => activityKey(a) === expandedActivityKey);
+            if (!activity) {
+                panel.style.display = "none";
+                return;
+            }
+
+            // Recoger todos los RA presentes en ceNotas de cualquier alumno
+            const raSet = new Set();
+            activity.notas.forEach((nota) => {
+                Object.keys(nota.ceNotas || {}).forEach((code) => {
+                    const ra = getRaFromCode(code);
+                    if (ra !== null) raSet.add(ra);
+                });
+            });
+
+            const ras = Array.from(raSet).sort((a, b) => a - b);
+            if (!ras.length) {
+                panel.style.display = "none";
+                return;
+            }
+
+            const alumnos = getVisibleStudents();
+            const actLabel = `${shortTypeLabel(activity.tipoLabel)} ${activity.numero}${activity.nombre ? " · " + activity.nombre : ""}`;
+
+            let html = `
+                <div class="ra-panel-header">
+                    <span>Notas por RA — ${escapeHtml(actLabel)}</span>
+                    <button class="ra-panel-close" type="button" onclick="toggleRaPanel('${expandedActivityKey}')">&#10005; Cerrar</button>
+                </div>
+                <div class="ra-panel-table-wrap">
+                    <table class="ra-panel-table">
+                        <thead>
+                            <tr>
+                                <th class="ra-student-col">Alumno</th>
+                                ${ras.map((ra) => `<th>RA ${ra}</th>`).join("")}
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+            alumnos.forEach((alumno) => {
+                const actNota = activity.notas.find((n) => n.nombre === alumno.nombre);
+                const ceNotas = actNota ? (actNota.ceNotas || {}) : {};
+
+                // Media por RA
+                const raAvg = {};
+                ras.forEach((ra) => {
+                    const vals = Object.entries(ceNotas)
+                        .filter(([code]) => getRaFromCode(code) === ra)
+                        .map(([, v]) => parseGrade(v))
+                        .filter((v) => v !== null);
+                    raAvg[ra] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+                });
+
+                html += `<tr>
+                    <td class="ra-student-name">${escapeHtml(alumno.nombre)}</td>
+                    ${ras.map((ra) => `<td>${gradeBadge(raAvg[ra] !== null ? raAvg[ra] : "")}</td>`).join("")}
+                </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            panel.innerHTML = html;
+            panel.style.display = "";
+        }
+
+        function shortTypeLabel(label) {
+            return String(label || "").replace("Otras actividades", "Otras");
+        }
+
+        function gradeBadge(value) {
+            const numeric = parseGrade(value);
+            if (numeric === null) {
+                return `<span class="grade empty">-</span>`;
+            }
+
+            const cls = numeric >= 5 ? "ok" : numeric >= 4 ? "warn" : "bad";
+            return `<span class="grade ${cls}">${formatGrade(numeric)}</span>`;
+        }
+
+        function parseGrade(value) {
+            if (value === null || value === undefined || String(value).trim() === "") {
+                return null;
+            }
+
+            const numeric = Number(String(value).replace(",", "."));
+            return Number.isNaN(numeric) ? null : numeric;
+        }
+
+        function formatGrade(value) {
+            return Number(value).toLocaleString("es-ES", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function normalize(value) {
+            return String(value || "")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase()
+                .trim();
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function showMessage(text, type = "info") {
+            messageBox.textContent = text;
+            messageBox.className = `message show ${type}`;
+        }
+
+        function setDisabled(disabled) {
+            [unidadSelect, tipoSelect, searchInput, reloadButton].forEach((element) => {
+                element.disabled = disabled;
+            });
+        }
+    </script>
+</body>
+</html>

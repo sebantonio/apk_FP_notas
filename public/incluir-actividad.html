@@ -1,0 +1,597 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incluir actividad</title>
+    <script src="xlsx.full.min.js"></script><script src="app-bridge.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            padding: 20px;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: #1f2937;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            max-width: 1080px;
+            margin: 0 auto;
+            overflow: hidden;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.25);
+        }
+
+        .page-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f8f9ff;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .nav-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .nav-button,
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.92em;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .nav-button {
+            color: #667eea;
+            background: #ffffff;
+            border: 2px solid #667eea;
+            cursor: pointer;
+        }
+
+        .nav-link {
+            color: #ffffff;
+            background: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .header {
+            padding: 36px 30px;
+            color: #ffffff;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .header h1 {
+            margin-bottom: 10px;
+            font-size: 2.1em;
+        }
+
+        .header p {
+            opacity: 0.92;
+            font-size: 1.02em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .message {
+            display: none;
+            margin-bottom: 18px;
+            padding: 14px 18px;
+            border-radius: 6px;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            color: #721c24;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.info {
+            color: #0c5460;
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+
+        .form-panel {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            padding: 18px;
+            background: #f8f9ff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .add-panel {
+            margin-top: 18px;
+        }
+
+        .field.full {
+            grid-column: 1 / -1;
+        }
+
+        label,
+        .field-label {
+            display: block;
+            margin-bottom: 7px;
+            color: #4b5563;
+            font-size: 0.9em;
+            font-weight: 700;
+        }
+
+        select,
+        input[type="text"] {
+            width: 100%;
+            min-height: 42px;
+            padding: 9px 10px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            font: inherit;
+            background: #ffffff;
+        }
+
+        select:focus,
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.13);
+        }
+
+        .check-field {
+            display: flex;
+            align-items: center;
+            min-height: 42px;
+            padding: 9px 10px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            background: #ffffff;
+        }
+
+        .check-field label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+            color: #374151;
+            cursor: pointer;
+        }
+
+        .check-field input {
+            width: 18px;
+            height: 18px;
+            accent-color: #667eea;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        .summary-item {
+            padding: 15px;
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+        }
+
+        .summary-item span {
+            display: block;
+            margin-bottom: 5px;
+            color: #6b7280;
+            font-size: 0.88em;
+        }
+
+        .summary-item strong {
+            color: #667eea;
+            font-size: 1.1em;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        button {
+            min-height: 42px;
+            padding: 10px 18px;
+            color: #ffffff;
+            font: inherit;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            color: #667eea;
+            background: #ffffff;
+            border: 2px solid #667eea;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        @media (max-width: 760px) {
+            body {
+                padding: 10px;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .form-panel {
+                grid-template-columns: 1fr;
+            }
+
+            .page-nav {
+                align-items: stretch;
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="page-nav" aria-label="Navegación">
+            <div class="nav-group">
+                <button class="nav-button" type="button" onclick="window.history.back()">Atrás</button>
+                <a class="nav-link" href="index.html">Inicio</a>
+                <a class="nav-link" href="gestor-notas.html">Notas</a>
+            </div>
+        </nav>
+
+        <header class="header">
+            <h1>Incluir actividad</h1>
+            <p>Define el bloque de actividad en la hoja de la unidad: orden, nombre y si cuenta en el total.</p>
+        </header>
+
+        <main class="content">
+            <div id="message" class="message" role="status" aria-live="polite"></div>
+
+            <section class="form-panel" aria-label="Datos de la actividad">
+                <div class="field">
+                    <label for="unidadSelect">Unidad</label>
+                    <select id="unidadSelect"></select>
+                </div>
+
+                <div class="field">
+                    <label for="tipoSelect">Tipo de actividad</label>
+                    <select id="tipoSelect"></select>
+                </div>
+
+                <div class="field">
+                    <label for="ordenSelect">Orden</label>
+                    <select id="ordenSelect"></select>
+                </div>
+
+                <div class="field">
+                    <span class="field-label">Incluida</span>
+                    <div class="check-field">
+                        <label for="includedInput">
+                            <input type="checkbox" id="includedInput" />
+                            Marcar con X
+                        </label>
+                    </div>
+                </div>
+
+                <div class="field full">
+                    <label for="activityNameInput">Nombre de actividad</label>
+                    <input type="text" id="activityNameInput" placeholder="Ej.: Instalación de máquina virtual" />
+                </div>
+            </section>
+
+            <section class="form-panel add-panel" aria-label="Añadir nueva actividad">
+                <div class="field full">
+                    <span class="field-label">Añadir nueva actividad</span>
+                </div>
+
+                <div class="field">
+                    <label for="newTipoSelect">Tipo de actividad</label>
+                    <select id="newTipoSelect"></select>
+                </div>
+
+                <div class="field">
+                    <span class="field-label">Incluida</span>
+                    <div class="check-field">
+                        <label for="newIncludedInput">
+                            <input type="checkbox" id="newIncludedInput" checked />
+                            Marcar con X
+                        </label>
+                    </div>
+                </div>
+
+                <div class="field full">
+                    <label for="newActivityNameInput">Nombre de la nueva actividad</label>
+                    <input type="text" id="newActivityNameInput" placeholder="Ej.: Montaje de equipos" />
+                </div>
+            </section>
+
+            <section class="summary" aria-label="Resumen">
+                <div class="summary-item">
+                    <span>Archivo</span>
+                    <strong id="fileName">-</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Bloque seleccionado</span>
+                    <strong id="selectedBlock">-</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Incluidas del tipo</span>
+                    <strong id="includedCount">0/0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Siguiente actividad</span>
+                    <strong id="nextActivity">-</strong>
+                </div>
+            </section>
+
+            <div class="actions">
+                <button class="secondary" type="button" id="reloadButton">Recargar</button>
+                <button type="button" id="saveButton">Crear actividad</button>
+                <button type="button" id="addButton">Añadir nueva</button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentState = null;
+        let currentNotes = [];
+
+        const messageBox = document.getElementById("message");
+        const unidadSelect = document.getElementById("unidadSelect");
+        const tipoSelect = document.getElementById("tipoSelect");
+        const ordenSelect = document.getElementById("ordenSelect");
+        const activityNameInput = document.getElementById("activityNameInput");
+        const includedInput = document.getElementById("includedInput");
+        const newTipoSelect = document.getElementById("newTipoSelect");
+        const newActivityNameInput = document.getElementById("newActivityNameInput");
+        const newIncludedInput = document.getElementById("newIncludedInput");
+        const fileName = document.getElementById("fileName");
+        const selectedBlock = document.getElementById("selectedBlock");
+        const includedCount = document.getElementById("includedCount");
+        const nextActivity = document.getElementById("nextActivity");
+        const reloadButton = document.getElementById("reloadButton");
+        const saveButton = document.getElementById("saveButton");
+        const addButton = document.getElementById("addButton");
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (!window.electronExcel) {
+                showMessage("Abre esta pantalla desde la aplicación local para modificar el Excel.", "error");
+                setDisabled(true);
+                return;
+            }
+
+            reloadButton.addEventListener("click", () => loadActivity());
+            saveButton.addEventListener("click", saveActivity);
+            unidadSelect.addEventListener("change", () => loadActivity({ resetOrder: true }));
+            tipoSelect.addEventListener("change", () => loadActivity({ resetOrder: true }));
+            ordenSelect.addEventListener("change", () => loadActivity());
+            includedInput.addEventListener("change", renderSummary);
+            activityNameInput.addEventListener("input", renderSummary);
+            newTipoSelect.addEventListener("change", renderSummary);
+            newActivityNameInput.addEventListener("input", renderSummary);
+            newIncludedInput.addEventListener("change", renderSummary);
+            addButton.addEventListener("click", addNewActivity);
+
+            loadActivity();
+        });
+
+        async function loadActivity(options = {}) {
+            try {
+                setDisabled(true);
+                showMessage("Leyendo actividades disponibles...", "info");
+
+                const payload = {
+                    unidad: unidadSelect.value || "U1",
+                    tipo: tipoSelect.value || "practicas",
+                    actividad: options.resetOrder ? 1 : Number(ordenSelect.value || 1)
+                };
+                const data = await window.electronExcel.getNotasActividad(payload);
+
+                if (!data) {
+                    showMessage("No se encontró el Excel. Selecciónalo desde la pantalla principal.", "error");
+                    setDisabled(false);
+                    return;
+                }
+
+                currentState = data;
+                currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                renderControls(data);
+                renderForm(data);
+                renderSummary();
+                showMessage("Actividad cargada correctamente.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudieron leer las actividades.", "error");
+            } finally {
+                setDisabled(false);
+            }
+        }
+
+        function renderControls(data) {
+            fillSelect(unidadSelect, data.unidades || [], (item) => item.codigo, (item) => item.label || item.codigo, data.unidad);
+            fillSelect(tipoSelect, data.tipos || [], (item) => item.key, (item) => item.label, data.tipo);
+            fillSelect(newTipoSelect, data.tipos || [], (item) => item.key, (item) => item.label, newTipoSelect.value || data.tipo);
+            fillSelect(
+                ordenSelect,
+                data.actividades || [],
+                (item) => item.numero,
+                (item) => item.nombre ? `${item.numero} - ${item.nombre}` : String(item.numero),
+                data.actividad
+            );
+        }
+
+        function renderForm(data) {
+            activityNameInput.value = data.block && data.block.nombre ? data.block.nombre : "";
+            includedInput.checked = Boolean(data.block && data.block.incluida);
+        }
+
+        function renderSummary() {
+            if (!currentState) {
+                return;
+            }
+
+            const type = (currentState.tipos || []).find((item) => item.key === currentState.tipo);
+            const savedBlock = (currentState.actividades || []).find((item) => Number(item.numero) === Number(currentState.actividad));
+            const includedDelta = savedBlock
+                ? Number(includedInput.checked) - Number(Boolean(savedBlock.incluida))
+                : Number(includedInput.checked);
+            const includedTotal = Math.max(0, (type?.incluidas || 0) + includedDelta);
+            const nameSuffix = activityNameInput.value.trim() ? ` - ${activityNameInput.value.trim()}` : "";
+            const newType = (currentState.tipos || []).find((item) => item.key === newTipoSelect.value) || type;
+            const newTypeLabel = newType ? newType.label : newTipoSelect.value;
+            const newNameSuffix = newActivityNameInput.value.trim() ? ` - ${newActivityNameInput.value.trim()}` : "";
+
+            fileName.textContent = currentState.fileName || "-";
+            selectedBlock.textContent = `${currentState.unidad} - ${type ? type.label : currentState.tipo} ${currentState.actividad}${nameSuffix}`;
+            includedCount.textContent = `${includedTotal}/${type?.total || 0}`;
+            nextActivity.textContent = `${currentState.unidad} - ${newTypeLabel} ${(newType?.total || 0) + 1}${newNameSuffix}`;
+        }
+
+        async function saveActivity() {
+            if (!currentState) {
+                return;
+            }
+
+            const nombreActividad = activityNameInput.value.trim();
+            if (!nombreActividad) {
+                showMessage("Escribe el nombre de la actividad antes de crearla.", "error");
+                activityNameInput.focus();
+                return;
+            }
+
+            try {
+                setDisabled(true);
+                showMessage("Escribiendo actividad en el Excel...", "info");
+
+                const data = await window.electronExcel.saveNotasActividad({
+                    unidad: currentState.unidad,
+                    tipo: currentState.tipo,
+                    actividad: currentState.actividad,
+                    nombreActividad,
+                    incluida: includedInput.checked,
+                    notas: currentNotes
+                });
+
+                currentState = data;
+                currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                renderControls(data);
+                renderForm(data);
+                renderSummary();
+                showMessage("Actividad creada correctamente.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudo crear la actividad.", "error");
+            } finally {
+                setDisabled(false);
+            }
+        }
+
+        async function addNewActivity() {
+            if (!currentState) {
+                return;
+            }
+
+            const nombreActividad = newActivityNameInput.value.trim();
+            if (!nombreActividad) {
+                showMessage("Escribe el nombre de la nueva actividad.", "error");
+                newActivityNameInput.focus();
+                return;
+            }
+
+            try {
+                setDisabled(true);
+                showMessage("Copiando el bloque anterior y creando la nueva actividad...", "info");
+
+                const data = await window.electronExcel.addActividad({
+                    unidad: unidadSelect.value || currentState.unidad,
+                    tipo: newTipoSelect.value || currentState.tipo,
+                    nombreActividad,
+                    incluida: newIncludedInput.checked
+                });
+
+                currentState = data;
+                currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                newActivityNameInput.value = "";
+                newIncludedInput.checked = true;
+                renderControls(data);
+                renderForm(data);
+                renderSummary();
+                showMessage("Nueva actividad añadida correctamente.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudo añadir la actividad.", "error");
+            } finally {
+                setDisabled(false);
+            }
+        }
+
+        function fillSelect(select, items, valueGetter, labelGetter, selectedValue) {
+            select.innerHTML = "";
+
+            if (!items.length) {
+                const option = document.createElement("option");
+                option.value = "";
+                option.textContent = "Sin datos";
+                select.appendChild(option);
+                return;
+            }
+
+            items.forEach((item) => {
+                const option = document.createElement("option");
+                option.value = valueGetter(item);
+                option.textContent = labelGetter(item);
+                if (String(option.value) === String(selectedValue)) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+
+        function setDisabled(disabled) {
+            [unidadSelect, tipoSelect, ordenSelect, activityNameInput, includedInput, newTipoSelect, newActivityNameInput, newIncludedInput, reloadButton, saveButton, addButton].forEach((element) => {
+                element.disabled = disabled;
+            });
+        }
+
+        function showMessage(text, type) {
+            messageBox.textContent = text;
+            messageBox.className = `message ${type} show`;
+        }
+    </script>
+</body>
+</html>

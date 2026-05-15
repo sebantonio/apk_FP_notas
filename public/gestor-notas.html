@@ -1,0 +1,1699 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notas de Actividades - Excel</title>
+    <script src="xlsx.full.min.js"></script><script src="app-bridge.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            padding: 20px;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: #f3f6fb;
+            color: #1f2937;
+        }
+
+        .container {
+            max-width: 1220px;
+            margin: 0 auto;
+            overflow: hidden;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 14px 42px rgba(31, 41, 55, 0.16);
+        }
+
+        .page-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f8f9ff;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .nav-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .nav-button,
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 13px;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 7px;
+            font: inherit;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: #374151;
+            text-decoration: none;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .nav-button:hover, .nav-link:hover { border-color: #6366f1; background: #f5f3ff; }
+
+        .header {
+            padding: 18px 20px 12px;
+            background: white;
+            border-bottom: 2px solid #e0e7ff;
+        }
+
+        .header h1 {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #312e81;
+            margin-bottom: 2px;
+        }
+
+        .header p {
+            font-size: 0.85rem;
+            color: #6b7280;
+            font-weight: 400;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .message {
+            display: none;
+            margin-bottom: 18px;
+            padding: 14px 18px;
+            border-radius: 6px;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            color: #721c24;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.info {
+            color: #0c5460;
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(150px, 220px) minmax(220px, 1fr) auto auto;
+            gap: 14px;
+            align-items: end;
+            margin-bottom: 22px;
+            padding: 18px;
+            background: #f8f9ff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .field label,
+        .field-label {
+            display: block;
+            margin-bottom: 7px;
+            color: #4b5563;
+            font-size: 0.9em;
+            font-weight: 700;
+        }
+
+        select,
+        input[type="text"] {
+            width: 100%;
+            min-height: 42px;
+            padding: 9px 10px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            font: inherit;
+            background: white;
+        }
+
+        select:focus,
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.13);
+        }
+
+        .check-field {
+            display: flex;
+            align-items: center;
+            min-height: 42px;
+            padding: 9px 10px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            background: white;
+        }
+
+        .check-field label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+            color: #374151;
+            cursor: pointer;
+        }
+
+        .check-field input {
+            width: 18px;
+            height: 18px;
+            accent-color: #6366f1;
+        }
+
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 18px;
+        }
+
+        button {
+            min-height: 38px;
+            padding: 7px 14px;
+            color: white;
+            font: inherit;
+            font-size: 0.88rem;
+            font-weight: 700;
+            background: #6366f1;
+            border: 1px solid #4f46e5;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        button:hover { background: #4f46e5; }
+
+        button.secondary {
+            color: #374151;
+            background: white;
+            border: 1px solid #d1d5db;
+        }
+        button.secondary:hover { border-color: #6366f1; background: #f5f3ff; color: #4338ca; }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .summary-item {
+            padding: 12px 15px;
+            background: #f5f3ff;
+            border-left: 4px solid #6366f1;
+            border-radius: 8px;
+        }
+
+        .summary-item span {
+            display: block;
+            margin-bottom: 4px;
+            color: #6b7280;
+            font-size: 0.85em;
+        }
+
+        .summary-item strong {
+            color: #3730a3;
+            font-size: 1.05em;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+
+        .summary-item.warning {
+            border-left-color: #f59e0b;
+        }
+
+        .summary-item.warning strong {
+            color: #b45309;
+        }
+
+        .summary-item.danger {
+            border-left-color: #dc2626;
+        }
+
+        .summary-item.danger strong {
+            color: #b91c1c;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        th {
+            padding: 10px 14px;
+            color: #3730a3;
+            text-align: left;
+            background: #eef2ff;
+            font-weight: 800;
+            border-bottom: 2px solid #c7d2fe;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 11px 14px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        tr:hover {
+            background: #f8f9ff;
+        }
+
+        .col-numero {
+            width: 70px;
+            text-align: center;
+        }
+
+        .col-nota {
+            width: 150px;
+        }
+
+        .numero {
+            color: #6366f1;
+            font-weight: 800;
+            text-align: center;
+        }
+
+        .nota-input {
+            width: 100%;
+            max-width: 110px;
+            min-height: 38px;
+            text-align: center;
+        }
+
+        .nota-input.invalid {
+            color: #991b1b;
+            background: #fff1f2;
+            border-color: #dc2626;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+        }
+
+        tr.pending-note td {
+            background: #fffbeb;
+        }
+
+        tr.invalid-note td {
+            background: #fff1f2;
+        }
+
+        .note-help {
+            display: block;
+            margin-top: 4px;
+            color: #991b1b;
+            font-size: 0.78em;
+        }
+
+        .empty {
+            padding: 28px;
+            color: #6b7280;
+            text-align: center;
+        }
+
+        /* --- Criterios desplegable --- */
+        .criterios-section {
+            margin-bottom: 22px;
+        }
+
+        .criterios-details {
+            border: 1px solid #c7d2fe;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(99,102,241,0.08);
+        }
+
+        .criterios-details > summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 18px;
+            font-size: 0.95em;
+            font-weight: 800;
+            color: #3730a3;
+            background: #eef2ff;
+            cursor: pointer;
+            list-style: none;
+            user-select: none;
+            border-bottom: 1px solid #c7d2fe;
+        }
+
+        .criterios-details > summary::-webkit-details-marker { display: none; }
+
+        .criterios-details > summary::after {
+            content: "▲";
+            font-size: 0.8em;
+            opacity: 0.85;
+            transition: transform 0.2s;
+        }
+
+        .criterios-details[open] > summary::after {
+            transform: rotate(180deg);
+        }
+
+        .criterios-body {
+            padding: 18px;
+            background: #fafbff;
+            border-top: 1px solid #d0d5f8;
+        }
+
+        .ra-selector-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .ra-selector-row label {
+            font-weight: 700;
+            color: #4b5563;
+            font-size: 0.9em;
+            white-space: nowrap;
+        }
+
+        .ra-selector-row select {
+            max-width: 600px;
+        }
+
+        .ra-desc-box {
+            margin-bottom: 14px;
+            padding: 8px 14px;
+            background: #eef0fd;
+            border-left: 4px solid #6366f1;
+            border-radius: 6px;
+            color: #374151;
+            font-size: 0.88em;
+            display: none;
+        }
+
+        .ce-list-header {
+            display: grid;
+            grid-template-columns: 52px 1fr 80px 110px;
+            gap: 10px;
+            padding: 6px 4px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 0.8em;
+            font-weight: 700;
+        }
+
+        .criterio-row {
+            display: grid;
+            grid-template-columns: 52px 1fr 80px 110px;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .criterio-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .criterio-code {
+            font-weight: 700;
+            color: #4338ca;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .criterio-texto {
+            width: 100%;
+            height: 36px;
+            padding: 6px 10px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            font: inherit;
+            font-size: 0.85em;
+            resize: none;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .criterio-texto:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.13);
+            resize: vertical;
+            height: auto;
+            min-height: 36px;
+            white-space: normal;
+        }
+
+        .criterio-nota {
+            width: 100%;
+            height: 36px;
+            padding: 6px 8px;
+            border: 1px solid #d7d7d7;
+            border-radius: 6px;
+            font: inherit;
+            font-size: 0.9em;
+            text-align: center;
+            background: white;
+        }
+
+        .criterio-nota:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.13);
+        }
+
+        .criterio-nota.invalid {
+            color: #991b1b;
+            background: #fff1f2;
+            border-color: #dc2626;
+        }
+
+        .criterio-peso {
+            color: #6b7280;
+            font-size: 0.78em;
+            text-align: right;
+            line-height: 1.3;
+        }
+
+        .criterios-empty {
+            padding: 18px;
+            color: #6b7280;
+            text-align: center;
+            font-size: 0.92em;
+        }
+
+        /* --- Toggle CE por alumno --- */
+        .col-toggle {
+            width: 44px;
+            text-align: center;
+        }
+
+        .btn-toggle-ce {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            min-height: unset;
+            color: #6366f1;
+            background: white;
+            border: 2px solid #6366f1;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.72em;
+            font-weight: 700;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .btn-toggle-ce.open {
+            color: white;
+            background: #6366f1;
+        }
+
+        .ce-detail-row {
+            display: none;
+        }
+
+        .ce-detail-row.open {
+            display: table-row;
+        }
+
+        .ce-detail-row:hover {
+            background: initial;
+        }
+
+        .ce-detail-content {
+            padding: 10px 16px 14px;
+            background: #f0f2fc;
+            border-bottom: 2px solid #d0d5f8;
+        }
+
+        .ce-detail-ra-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .ce-detail-ra-row label {
+            font-size: 0.82em;
+            font-weight: 700;
+            color: #4b5563;
+            white-space: nowrap;
+        }
+
+        .ce-detail-ra-row select {
+            max-width: 520px;
+            min-height: 32px;
+            padding: 4px 8px;
+            font-size: 0.85em;
+        }
+
+        .ce-detail-header {
+            margin-bottom: 8px;
+            font-size: 0.82em;
+            font-weight: 700;
+            color: #6366f1;
+        }
+
+        .ce-detail-list {
+            display: grid;
+            grid-template-columns: 52px 1fr 70px 100px;
+            gap: 4px 10px;
+        }
+
+        .ce-detail-col-header {
+            color: #6b7280;
+            font-size: 0.75em;
+            font-weight: 700;
+            padding: 2px 0 5px;
+            border-bottom: 1px solid #d0d5f8;
+        }
+
+        .ce-detail-code {
+            font-weight: 700;
+            color: #4338ca;
+            font-size: 0.85em;
+            display: flex;
+            align-items: center;
+            padding: 2px 0;
+        }
+
+        .ce-detail-texto {
+            font-size: 0.82em;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            padding: 2px 0;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .ce-detail-nota {
+            font-weight: 700;
+            font-size: 0.9em;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 0;
+        }
+
+        .ce-detail-nota.empty { color: #9ca3af; }
+        .ce-detail-nota.high  { color: #059669; }
+        .ce-detail-nota.low   { color: #dc2626; }
+
+        .ce-detail-peso {
+            font-size: 0.75em;
+            color: #6b7280;
+            text-align: right;
+            line-height: 1.3;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            white-space: pre-line;
+            padding: 2px 0;
+        }
+
+        .ce-nota-input {
+            width: 100%;
+            height: 30px;
+            padding: 3px 6px;
+            border: 1px solid #d7d7d7;
+            border-radius: 5px;
+            font: inherit;
+            font-size: 0.88em;
+            text-align: center;
+            background: white;
+        }
+
+        .ce-nota-input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+        }
+
+        .ce-nota-input.high   { border-color: #059669; color: #059669; font-weight: 700; }
+        .ce-nota-input.low    { border-color: #dc2626; color: #dc2626; font-weight: 700; }
+        .ce-nota-input.invalid { border-color: #dc2626; background: #fff1f2; color: #991b1b; }
+
+        .ce-detail-empty {
+            padding: 10px;
+            color: #6b7280;
+            font-size: 0.85em;
+            text-align: center;
+            grid-column: 1 / -1;
+        }
+
+        .criterios-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        @media (max-width: 800px) {
+            body {
+                padding: 10px;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="page-nav" aria-label="Navegacion">
+            <div class="nav-group">
+                <button class="nav-button" type="button" onclick="window.history.back()">Atras</button>
+                <a class="nav-link" href="index.html">Inicio</a>
+            </div>
+            <div class="nav-group">
+                <a class="nav-link" href="visor-actividades.html">Ver actividades</a>
+                <a class="nav-link" href="gestor-rraa-criterios.html">RRAA y CE</a>
+            </div>
+        </nav>
+
+        <header class="header">
+            <h1>Notas de Actividades</h1>
+            <p>Introduce la nota final de practicas, memorias, otras actividades y controles por unidad.</p>
+        </header>
+
+        <main class="content">
+            <div id="message" class="message"></div>
+
+            <section class="controls" aria-label="Seleccion de actividad">
+                <div class="field">
+                    <label for="unidadSelect">Unidad</label>
+                    <select id="unidadSelect"></select>
+                </div>
+                <div class="field">
+                    <label for="tipoSelect">Tipo de actividad</label>
+                    <select id="tipoSelect"></select>
+                </div>
+                <div class="field">
+                    <label for="actividadSelect">Actividad</label>
+                    <select id="actividadSelect"></select>
+                </div>
+                <div class="field">
+                    <label for="activityTitleInput">Nombre</label>
+                    <input type="text" id="activityTitleInput" placeholder="Nombre de la actividad" />
+                </div>
+                <div class="field">
+                    <span class="field-label">Incluida</span>
+                    <div class="check-field">
+                        <label for="includedInput">
+                            <input type="checkbox" id="includedInput" />
+                            Cuenta en el total
+                        </label>
+                    </div>
+                </div>
+                <button class="secondary" type="button" id="reloadButton">Recargar</button>
+            </section>
+
+            <section id="criteriosSection" class="criterios-section" style="display:none" aria-label="Criterios de evaluacion">
+                <details class="criterios-details" id="criteriosDetails">
+                    <summary>Criterios de Evaluacion (CE) del RA</summary>
+                    <div class="criterios-body">
+                        <div class="ra-selector-row">
+                            <label for="raSelect">Resultado de Aprendizaje</label>
+                            <select id="raSelect">
+                                <option value="">-- Selecciona un RA --</option>
+                            </select>
+                        </div>
+                        <div class="ra-desc-box" id="raDescBox"></div>
+                        <div id="criteriosContent"></div>
+                        <div class="criterios-actions">
+                            <button class="secondary" type="button" id="saveCriteriosButton">Guardar CE</button>
+                        </div>
+                    </div>
+                </details>
+            </section>
+
+            <section class="summary" aria-label="Resumen">
+                <div class="summary-item">
+                    <span>Archivo</span>
+                    <strong id="fileName">-</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Actividad</span>
+                    <strong id="activityName">-</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Alumnos</span>
+                    <strong id="studentCount">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Con nota</span>
+                    <strong id="gradedCount">0</strong>
+                </div>
+                <div class="summary-item warning">
+                    <span>Pendientes</span>
+                    <strong id="pendingCount">0</strong>
+                </div>
+                <div class="summary-item danger">
+                    <span>Errores</span>
+                    <strong id="invalidCount">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total prácticas</span>
+                    <strong id="totalPracticas">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total memorias</span>
+                    <strong id="totalMemorias">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total otras</span>
+                    <strong id="totalOtros">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total controles</span>
+                    <strong id="totalControles">0</strong>
+                </div>
+            </section>
+
+            <section>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="col-numero">N</th>
+                                <th>Alumno</th>
+                                <th class="col-nota">Nota final</th>
+                                <th class="col-toggle">CE</th>
+                            </tr>
+                        </thead>
+                        <tbody id="notasBody">
+                            <tr>
+                                <td class="empty" colspan="4">Cargando datos...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="button-row">
+                    <button class="secondary" type="button" id="clearButton">Vaciar notas</button>
+                    <button type="button" id="saveButton">Guardar notas</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let currentState = null;
+        let currentNotes = [];
+        let currentCriteriosState = null;
+        let autoSaveTimeout = null;
+        let hayCambiosSinGuardar = false;
+        const AUTO_SAVE_DELAY_MS = 15000;
+        const _notasCache = new Map();
+
+        const messageBox = document.getElementById("message");
+        const unidadSelect = document.getElementById("unidadSelect");
+        const tipoSelect = document.getElementById("tipoSelect");
+        const actividadSelect = document.getElementById("actividadSelect");
+        const activityTitleInput = document.getElementById("activityTitleInput");
+        const includedInput = document.getElementById("includedInput");
+        const notasBody = document.getElementById("notasBody");
+        const fileName = document.getElementById("fileName");
+        const activityName = document.getElementById("activityName");
+        const studentCount = document.getElementById("studentCount");
+        const gradedCount = document.getElementById("gradedCount");
+        const pendingCount = document.getElementById("pendingCount");
+        const invalidCount = document.getElementById("invalidCount");
+        const totalPracticas = document.getElementById("totalPracticas");
+        const totalMemorias = document.getElementById("totalMemorias");
+        const totalOtros = document.getElementById("totalOtros");
+        const totalControles = document.getElementById("totalControles");
+        const saveButton = document.getElementById("saveButton");
+        const reloadButton = document.getElementById("reloadButton");
+        const clearButton = document.getElementById("clearButton");
+        const criteriosSection = document.getElementById("criteriosSection");
+        const criteriosContent = document.getElementById("criteriosContent");
+        const saveCriteriosButton = document.getElementById("saveCriteriosButton");
+        const raSelect = document.getElementById("raSelect");
+        const raDescBox = document.getElementById("raDescBox");
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (!window.electronExcel) {
+                showMessage("Abre esta pantalla desde la aplicacion local de Electron para modificar el Excel.", "error");
+                setDisabled(true);
+                return;
+            }
+
+            reloadButton.addEventListener("click", () => loadNotasConGuardado());
+            saveButton.addEventListener("click", saveNotas);
+            clearButton.addEventListener("click", clearNotas);
+            saveCriteriosButton.addEventListener("click", saveCriterios);
+            raSelect.addEventListener("change", () => renderCeForSelectedRa());
+            unidadSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
+            tipoSelect.addEventListener("change", () => loadNotasConGuardado({ keepActivity: false }));
+            actividadSelect.addEventListener("change", () => loadNotasConGuardado());
+            activityTitleInput.addEventListener("input", () => {
+                if (currentState) {
+                    currentState.block = {
+                        ...(currentState.block || {}),
+                        nombre: activityTitleInput.value
+                    };
+                    renderSummary(currentState);
+                    marcarCambio();
+                }
+            });
+            includedInput.addEventListener("change", () => {
+                if (currentState) {
+                    currentState.block = {
+                        ...(currentState.block || {}),
+                        incluida: includedInput.checked
+                    };
+                    renderSummary(currentState);
+                    marcarCambio();
+                }
+            });
+
+            // Event delegation para inputs de notas (optimización: 1 listener en lugar de N)
+            notasBody.addEventListener("input", (event) => {
+                const input = event.target;
+                if (input.classList.contains("nota-input")) {
+                    const row = input.closest("tr");
+                    const rowIdx = Number(row.dataset.studentIdx);
+                    if (!Number.isNaN(rowIdx) && currentNotes[rowIdx]) {
+                        currentNotes[rowIdx].nota = input.value;
+                        updateNoteValidation(rowIdx, input);
+                        renderSummary(currentState);
+                        marcarCambio();
+                    }
+                }
+            });
+
+            notasBody.addEventListener("paste", (event) => {
+                const input = event.target;
+                if (!input.classList.contains("nota-input")) {
+                    return;
+                }
+
+                const pastedText = event.clipboardData && event.clipboardData.getData("text");
+                const pastedValues = parsePastedGrades(pastedText);
+                if (pastedValues.length <= 1) {
+                    return;
+                }
+
+                event.preventDefault();
+                const row = input.closest("tr");
+                const startIdx = Number(row.dataset.studentIdx);
+                applyPastedGrades(startIdx, pastedValues);
+            });
+
+            notasBody.addEventListener("click", (event) => {
+                const btn = event.target.closest(".btn-toggle-ce");
+                if (!btn) return;
+                const idx = Number(btn.dataset.idx);
+                toggleCeRow(idx, btn);
+            });
+
+            loadNotas();
+        });
+
+        async function loadNotasConGuardado(options = {}) {
+            const saved = await guardarCambiosAntesDeCerrar();
+            if (saved) {
+                await loadNotas(options);
+            }
+        }
+
+        async function loadNotas(options = {}) {
+            try {
+                setDisabled(true);
+
+                const unidad = unidadSelect.value || "U1";
+                const tipo = tipoSelect.value || "practicas";
+                const actividad = options.keepActivity === false ? 1 : Number(actividadSelect.value || 1);
+                const cacheKey = `${unidad}:${tipo}:${actividad}`;
+
+                let data;
+                if (options.fromCache !== false && _notasCache.has(cacheKey)) {
+                    data = _notasCache.get(cacheKey);
+                } else {
+                    showMessage("Leyendo actividades de la hoja seleccionada...", "info");
+                    data = await window.electronExcel.getNotasActividad({ unidad, tipo, actividad });
+                    if (data) {
+                        _notasCache.set(cacheKey, data);
+                    }
+                }
+
+                if (!data) {
+                    showMessage("No se encontro el Excel. Seleccionalo desde el gestor de alumnos o coloca la plantilla en esta carpeta.", "error");
+                    setDisabled(false);
+                    return;
+                }
+
+                currentState = data;
+                currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                hayCambiosSinGuardar = false;
+                if (autoSaveTimeout) {
+                    clearTimeout(autoSaveTimeout);
+                    autoSaveTimeout = null;
+                }
+                renderControls(data);
+                renderSummary(data);
+                renderActivityMeta(data);
+                renderCriterios(data);
+                renderTable();
+                showMessage("Actividad cargada correctamente.", "success");
+
+                // Precargar el resto de actividades en segundo plano
+                if (data.actividades && data.actividades.length > 1) {
+                    preloadOtherActividades(unidad, tipo, actividad, data.actividades);
+                }
+            } catch (error) {
+                showMessage(error.message || "No se pudieron cargar las notas.", "error");
+            } finally {
+                setDisabled(false);
+            }
+        }
+
+        async function preloadOtherActividades(unidad, tipo, actividadActual, actividades) {
+            for (const act of actividades) {
+                if (act.numero === actividadActual) continue;
+                const key = `${unidad}:${tipo}:${act.numero}`;
+                if (_notasCache.has(key)) continue;
+
+                try {
+                    const data = await window.electronExcel.getNotasActividad({ unidad, tipo, actividad: act.numero });
+                    if (data) {
+                        _notasCache.set(key, data);
+                    }
+                } catch (_e) {
+                    // Si falla la precarga se cargará bajo demanda
+                }
+            }
+        }
+
+        function renderControls(data) {
+            fillSelect(
+                unidadSelect,
+                data.unidades || [],
+                (item) => item.codigo,
+                (item) => item.label || item.codigo,
+                data.unidad
+            );
+
+            fillSelect(
+                tipoSelect,
+                data.tipos || [],
+                (item) => item.key,
+                (item) => item.label,
+                data.tipo
+            );
+
+            fillSelect(
+                actividadSelect,
+                data.actividades || [],
+                (item) => item.numero,
+                (item) => item.nombre ? `Actividad ${item.numero} - ${item.nombre}` : `Actividad ${item.numero}`,
+                data.actividad
+            );
+        }
+
+        function fillSelect(select, items, valueGetter, labelGetter, selectedValue) {
+            select.innerHTML = "";
+
+            if (!items.length) {
+                const option = document.createElement("option");
+                option.value = "";
+                option.textContent = "Sin datos";
+                select.appendChild(option);
+                return;
+            }
+
+            items.forEach((item) => {
+                const option = document.createElement("option");
+                option.value = valueGetter(item);
+                option.textContent = labelGetter(item);
+                if (String(option.value) === String(selectedValue)) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+
+        function renderSummary(data) {
+            fileName.textContent = data.fileName || "-";
+            const type = (data.tipos || []).find((item) => item.key === data.tipo);
+            const blockName = data.block && data.block.nombre ? ` - ${data.block.nombre}` : "";
+            activityName.textContent = `${data.unidad} - ${type ? type.label : data.tipo} ${data.actividad}${blockName}`;
+            const stats = getNotesStats();
+            studentCount.textContent = stats.total;
+            gradedCount.textContent = stats.graded;
+            pendingCount.textContent = stats.pending;
+            invalidCount.textContent = stats.invalid;
+            renderActivityTotals(data);
+        }
+
+        function renderActivityMeta(data) {
+            activityTitleInput.value = data.block && data.block.nombre ? data.block.nombre : "";
+            includedInput.checked = Boolean(data.block && data.block.incluida);
+        }
+
+        function renderActivityTotals(data) {
+            const byKey = new Map((data.tipos || []).map((item) => [item.key, item]));
+            totalPracticas.textContent = formatIncludedTotal(byKey.get("practicas"), data);
+            totalMemorias.textContent = formatIncludedTotal(byKey.get("memorias"), data);
+            totalOtros.textContent = formatIncludedTotal(byKey.get("otros"), data);
+            totalControles.textContent = formatIncludedTotal(byKey.get("controles"), data);
+        }
+
+        function formatIncludedTotal(type, data) {
+            if (!type) {
+                return "0";
+            }
+
+            let included = type.incluidas || 0;
+            const isCurrentType = data && data.tipo === type.key;
+            const selectedActivity = isCurrentType
+                ? (type.actividades || []).find((item) => Number(item.numero) === Number(data.actividad))
+                : null;
+
+            if (selectedActivity && data.block) {
+                included += Number(Boolean(data.block.incluida)) - Number(Boolean(selectedActivity.incluida));
+            }
+
+            return `${included}/${type.total || 0}`;
+        }
+
+        function renderTable() {
+            if (!currentNotes.length) {
+                notasBody.innerHTML = '<tr><td class="empty" colspan="4">No hay alumnos en esta actividad.</td></tr>';
+                return;
+            }
+
+            // Usar DocumentFragment para batch de reflows
+            const fragment = document.createDocumentFragment();
+            currentNotes.forEach((item, idx) => {
+                const validation = validateGrade(item.nota);
+                const row = document.createElement("tr");
+                row.className = validation.isInvalid ? "invalid-note" : validation.isEmpty ? "pending-note" : "";
+                row.dataset.studentIdx = idx;
+                row.innerHTML = `
+                    <td class="numero">${item.numero || idx + 1}</td>
+                    <td>${escapeHtml(item.nombre)}</td>
+                    <td>
+                        <input
+                            class="nota-input${validation.isInvalid ? " invalid" : ""}"
+                            type="text"
+                            inputmode="decimal"
+                            value="${escapeHtml(item.nota || "")}"
+                            title="${validation.message ? escapeHtml(validation.message) : "Pega una columna de Excel aqui para rellenar hacia abajo"}"
+                            aria-label="Nota de ${escapeHtml(item.nombre)}"
+                        >
+                        ${validation.message ? `<span class="note-help">${escapeHtml(validation.message)}</span>` : ""}
+                    </td>
+                    <td class="col-toggle">
+                        <button class="btn-toggle-ce" type="button" data-idx="${idx}" title="Ver criterios de evaluacion" aria-label="Ver CE de ${escapeHtml(item.nombre)}">&#9654;</button>
+                    </td>
+                `;
+                fragment.appendChild(row);
+
+                // Fila CE oculta para este alumno
+                const ceRow = document.createElement("tr");
+                ceRow.className = "ce-detail-row";
+                ceRow.dataset.ceFor = idx;
+                ceRow.innerHTML = '<td colspan="4"><div class="ce-detail-content"></div></td>';
+                fragment.appendChild(ceRow);
+            });
+
+            // Una sola operación de DOM en lugar de N
+            notasBody.textContent = '';
+            notasBody.appendChild(fragment);
+        }
+
+        async function saveNotas(options = {}) {
+            if (!currentState) {
+                return true;
+            }
+
+            const stats = getNotesStats();
+            if (stats.invalid > 0) {
+                renderSummary(currentState);
+                renderTable();
+                showMessage(`Hay ${stats.invalid} nota(s) invalida(s). Corrigelas antes de guardar.`, "error");
+                return false;
+            }
+
+            try {
+                setDisabled(true);
+                if (!options.silent) {
+                    showMessage("Guardando notas en el Excel...", "info");
+                }
+                const data = await window.electronExcel.saveNotasActividad({
+                    unidad: currentState.unidad,
+                    tipo: currentState.tipo,
+                    actividad: currentState.actividad,
+                    nombreActividad: activityTitleInput.value.trim(),
+                    incluida: includedInput.checked,
+                    notas: currentNotes.map((item) => {
+                        if (!item._ceModified) {
+                            // Solo campos mínimos — sin ceNotas → Rust no hace escrituras CE
+                            return { numero: item.numero, rowIdx: item.rowIdx, nombre: item.nombre, nota: item.nota };
+                        }
+                        return item;
+                    })
+                });
+                currentState = data;
+                currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                // Invalidar caché de esta clave para que la próxima carga relean datos actualizados
+                const savedKey = `${currentState.unidad}:${currentState.tipo}:${currentState.actividad}`;
+                _notasCache.set(savedKey, data);
+                renderControls(data);
+                renderSummary(data);
+                renderActivityMeta(data);
+                renderTable();
+                hayCambiosSinGuardar = false;
+                if (autoSaveTimeout) {
+                    clearTimeout(autoSaveTimeout);
+                    autoSaveTimeout = null;
+                }
+                if (!options.silent) {
+                    showMessage("Notas guardadas. Excel recalculara las formulas al abrirse.", "success");
+                }
+                return true;
+            } catch (error) {
+                showMessage(error.message || "No se pudieron guardar las notas.", "error");
+                return false;
+            } finally {
+                setDisabled(false);
+            }
+        }
+
+        function renderCriterios(data) {
+            const todasCriterios = data.todasCriterios || data.criterios || [];
+            const rraa = data.rraa || [];
+
+            if (!rraa.length) {
+                criteriosSection.style.display = "none";
+                currentCriteriosState = null;
+                return;
+            }
+
+            currentCriteriosState = {
+                rraa,
+                criterios: todasCriterios,
+                ponderacionesUnidad: data.ponderacionesUnidad || [],
+                criteriosPorUnidad: data.criterios || []
+            };
+
+            criteriosSection.style.display = "";
+
+            // Poblar selector de RA
+            raSelect.innerHTML = '<option value="">-- Selecciona un RA --</option>';
+            rraa.forEach((ra) => {
+                const opt = document.createElement("option");
+                opt.value = String(ra.numero);
+                opt.textContent = `RA ${ra.numero}${ra.descripcion ? " - " + ra.descripcion : ""}`;
+                raSelect.appendChild(opt);
+            });
+
+            // Pre-seleccionar el RA con mayor peso en la unidad actual
+            const criteriosUnidad = data.criterios || [];
+            let preselectedRa = null;
+            if (criteriosUnidad.length > 0) {
+                const raCounts = {};
+                criteriosUnidad.forEach((c) => {
+                    raCounts[c.raNumero] = (raCounts[c.raNumero] || 0) + 1;
+                });
+                preselectedRa = Object.entries(raCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+            }
+            if (preselectedRa) {
+                raSelect.value = preselectedRa;
+            }
+
+            criteriosContent.innerHTML = "";
+            raDescBox.style.display = "none";
+            renderCeForSelectedRa();
+        }
+
+        function renderCeForSelectedRa() {
+            if (!currentCriteriosState) return;
+
+            const raNum = Number(raSelect.value);
+            if (!raNum) {
+                raDescBox.style.display = "none";
+                criteriosContent.innerHTML = '<div class="criterios-empty">Selecciona un RA para ver sus criterios de evaluacion.</div>';
+                return;
+            }
+
+            const raInfo = currentCriteriosState.rraa.find((r) => Number(r.numero) === raNum);
+            if (raInfo && raInfo.descripcion) {
+                raDescBox.textContent = raInfo.descripcion;
+                raDescBox.style.display = "";
+            } else {
+                raDescBox.style.display = "none";
+            }
+
+            const criteriosRa = currentCriteriosState.criterios.filter((c) => Number(c.raNumero) === raNum);
+            if (!criteriosRa.length) {
+                criteriosContent.innerHTML = '<div class="criterios-empty">Este RA no tiene criterios de evaluacion definidos.</div>';
+                return;
+            }
+
+            // Encontrar ponderaciones de la unidad actual (por posicion en la lista de unidades)
+            const unidadActual = currentState && currentState.unidad;
+            const unidades = (currentState && currentState.unidades) || [];
+            const unidadIdx = unidades.findIndex((u) => u.codigo === unidadActual);
+            const unidadPesos = unidadIdx >= 0 ? currentCriteriosState.ponderacionesUnidad[unidadIdx] : null;
+
+            const fragment = document.createDocumentFragment();
+
+            const headerRow = document.createElement("div");
+            headerRow.className = "ce-list-header";
+            headerRow.innerHTML = "<span>CE</span><span>Descripcion (editable)</span><span style='text-align:center'>Nota CE</span><span style='text-align:right'>Peso unidad</span>";
+            fragment.appendChild(headerRow);
+
+            const firstStudentCeNotas = (currentState && currentState.notas && currentState.notas[0] && currentState.notas[0].ceNotas) || {};
+
+            criteriosRa.forEach((c) => {
+                const ci = String(c.colIdx);
+                const pesos = unidadPesos && unidadPesos.ponderaciones && unidadPesos.ponderaciones[ci];
+                const pesoTotal = pesos ? (pesos.ponderacion || 0) : 0;
+                const pesoInst = pesos ? (pesos.ponderacionInstituto || 0) : 0;
+                const pesoEmp = pesos ? (pesos.ponderacionEmpresa || 0) : 0;
+                const pesoLabel = pesoTotal > 0
+                    ? `${Math.round(pesoTotal * 100)}%\n(I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
+                    : "—";
+                const codigoLower = (c.codigo || "").toLowerCase();
+                const existingNota = firstStudentCeNotas[codigoLower] || firstStudentCeNotas[c.codigo] || "";
+
+                const row = document.createElement("div");
+                row.className = "criterio-row";
+                row.dataset.colIdx = c.colIdx;
+                row.dataset.codigo = codigoLower;
+                row.innerHTML = `
+                    <div class="criterio-code">${escapeHtml(c.codigo)}</div>
+                    <input type="text" class="criterio-texto" value="${escapeHtml(c.texto || "")}" aria-label="Descripcion CE ${escapeHtml(c.codigo)}" title="${escapeHtml(c.texto || "")}">
+                    <input type="text" inputmode="decimal" class="criterio-nota" value="${escapeHtml(existingNota)}" placeholder="0-10" aria-label="Nota CE ${escapeHtml(c.codigo)}">
+                    <div class="criterio-peso" style="white-space:pre-line">${escapeHtml(pesoLabel)}</div>
+                `;
+                fragment.appendChild(row);
+            });
+
+            criteriosContent.textContent = "";
+            criteriosContent.appendChild(fragment);
+            refreshOpenCeRows();
+        }
+
+        function toggleCeRow(idx, btn) {
+            const ceRow = notasBody.querySelector(`tr[data-ce-for="${idx}"]`);
+            if (!ceRow) return;
+            const isOpen = ceRow.classList.contains("open");
+            if (isOpen) {
+                ceRow.classList.remove("open");
+                btn.classList.remove("open");
+                btn.innerHTML = "&#9654;";
+            } else {
+                const container = ceRow.querySelector(".ce-detail-content");
+                renderCeContentForStudent(idx, container);
+                // Listener de edición — se añade una sola vez al abrir
+                container.addEventListener("input", (e) => {
+                    const inp = e.target;
+                    if (!inp.classList.contains("ce-nota-input")) return;
+                    const codigo = inp.dataset.codigo;
+                    if (!codigo || !currentNotes[idx]) return;
+                    if (!currentNotes[idx].ceNotas) currentNotes[idx].ceNotas = {};
+                    const val = inp.value.trim();
+                    currentNotes[idx].ceNotas[codigo] = val;
+                    currentNotes[idx]._ceModified = true;
+                    // Feedback visual inmediato
+                    const v = validateGrade(val);
+                    inp.classList.remove("high", "low", "invalid");
+                    if (!v.isEmpty) {
+                        if (v.isInvalid) inp.classList.add("invalid");
+                        else inp.classList.add(parseFloat(val.replace(",", ".")) >= 5 ? "high" : "low");
+                    }
+                    marcarCambio();
+                });
+                ceRow.classList.add("open");
+                btn.classList.add("open");
+                btn.innerHTML = "&#9660;";
+            }
+        }
+
+        function renderCeContentForStudent(idx, container, overrideRaNum) {
+            if (!currentCriteriosState) {
+                container.innerHTML = '<div class="ce-detail-empty">No hay criterios cargados.</div>';
+                return;
+            }
+            const rraa = currentCriteriosState.rraa;
+            const item = currentNotes[idx];
+            if (!item) return;
+
+            // Solo RAs que tengan al menos un criterio con código no vacío
+            const rraaConCriterios = rraa.filter((ra) =>
+                currentCriteriosState.criterios.some(
+                    (c) => Number(c.raNumero) === Number(ra.numero) && (c.codigo || "").trim() && (c.texto || "").trim()
+                )
+            );
+            if (!rraaConCriterios.length) {
+                container.innerHTML = '<div class="ce-detail-empty">No hay criterios definidos para esta unidad.</div>';
+                return;
+            }
+
+            // RA a mostrar: override > selector propio ya existente > primero disponible
+            const existingSelect = container.querySelector(".ce-student-ra-select");
+            let raNum;
+            if (overrideRaNum !== undefined) {
+                raNum = overrideRaNum;
+            } else if (existingSelect) {
+                raNum = Number(existingSelect.value);
+            } else {
+                raNum = Number(rraaConCriterios[0]?.numero) || 0;
+            }
+            // Si el RA actual no tiene criterios, ir al primero que sí los tenga
+            if (!rraaConCriterios.some((ra) => Number(ra.numero) === raNum)) {
+                raNum = Number(rraaConCriterios[0].numero);
+            }
+
+            // Opciones del selector de RA (solo los que tienen criterios)
+            const raOptionsHtml = rraaConCriterios.map((ra) => {
+                const label = `RA ${ra.numero}${ra.descripcion ? " - " + ra.descripcion : ""}`;
+                const sel = Number(ra.numero) === raNum ? " selected" : "";
+                return `<option value="${escapeHtml(String(ra.numero))}"${sel}>${escapeHtml(label)}</option>`;
+            }).join("");
+
+            // Lista CE del RA seleccionado (excluye criterios sin código o sin texto)
+            const criteriosRa = currentCriteriosState.criterios.filter(
+                (c) => Number(c.raNumero) === raNum && (c.codigo || "").trim() && (c.texto || "").trim()
+            );
+            const unidadActual = currentState && currentState.unidad;
+            const unidades = (currentState && currentState.unidades) || [];
+            const unidadIdx = unidades.findIndex((u) => u.codigo === unidadActual);
+            const unidadPesos = unidadIdx >= 0 ? currentCriteriosState.ponderacionesUnidad[unidadIdx] : null;
+            const ceNotas = item.ceNotas || {};
+
+            let ceListHtml = "";
+            if (!criteriosRa.length) {
+                ceListHtml = '<div class="ce-detail-empty">Este RA no tiene criterios definidos.</div>';
+            } else {
+                ceListHtml = '<div class="ce-detail-list">';
+                ceListHtml += '<div class="ce-detail-col-header">CE</div>';
+                ceListHtml += '<div class="ce-detail-col-header">Descripcion</div>';
+                ceListHtml += '<div class="ce-detail-col-header" style="text-align:center">Nota</div>';
+                ceListHtml += '<div class="ce-detail-col-header" style="text-align:right">Peso</div>';
+
+                criteriosRa.forEach((c) => {
+                    const ci = String(c.colIdx);
+                    const pesos = unidadPesos && unidadPesos.ponderaciones && unidadPesos.ponderaciones[ci];
+                    const pesoTotal = pesos ? (pesos.ponderacion || 0) : 0;
+                    const pesoInst  = pesos ? (pesos.ponderacionInstituto || 0) : 0;
+                    const pesoEmp   = pesos ? (pesos.ponderacionEmpresa || 0) : 0;
+                    const pesoLabel = pesoTotal > 0
+                        ? `${Math.round(pesoTotal * 100)}%\n(I:${Math.round(pesoInst * 100)}% E:${Math.round(pesoEmp * 100)}%)`
+                        : "—";
+                    const codigoLower = (c.codigo || "").toLowerCase();
+                    const nota = ceNotas[codigoLower] || ceNotas[c.codigo] || "";
+                    const notaNum = nota !== "" ? parseFloat(String(nota).replace(",", ".")) : null;
+                    const inputClass = nota === "" ? "" : notaNum >= 5 ? " high" : " low";
+
+                    ceListHtml += `<div class="ce-detail-code">${escapeHtml(c.codigo)}</div>`;
+                    ceListHtml += `<div class="ce-detail-texto" title="${escapeHtml(c.texto || "")}">${escapeHtml(c.texto || "")}</div>`;
+                    ceListHtml += `<input class="ce-nota-input${inputClass}" type="text" inputmode="decimal" data-codigo="${escapeHtml(codigoLower)}" value="${escapeHtml(nota)}" placeholder="0-10" aria-label="Nota CE ${escapeHtml(c.codigo)}">`;
+                    ceListHtml += `<div class="ce-detail-peso">${escapeHtml(pesoLabel)}</div>`;
+                });
+
+                ceListHtml += '</div>';
+            }
+
+            container.innerHTML = `
+                <div class="ce-detail-ra-row">
+                    <label>Resultado de Aprendizaje</label>
+                    <select class="ce-student-ra-select">${raOptionsHtml}</select>
+                </div>
+                ${ceListHtml}
+            `;
+
+            // Listener en el select recién creado
+            container.querySelector(".ce-student-ra-select").addEventListener("change", (e) => {
+                renderCeContentForStudent(idx, container, Number(e.target.value));
+            });
+        }
+
+        function refreshOpenCeRows() {
+            notasBody.querySelectorAll(".ce-detail-row.open").forEach((ceRow) => {
+                const idx = Number(ceRow.dataset.ceFor);
+                const content = ceRow.querySelector(".ce-detail-content");
+                if (content) renderCeContentForStudent(idx, content);
+            });
+        }
+
+        async function saveCriterios() {
+            if (!currentCriteriosState) return;
+
+            const editedTexts = {};
+            const ceNotas = {};
+            criteriosContent.querySelectorAll(".criterio-row").forEach((row) => {
+                const colIdx = Number(row.dataset.colIdx);
+                const codigo = row.dataset.codigo || "";
+                const textoInput = row.querySelector(".criterio-texto");
+                const notaInput = row.querySelector(".criterio-nota");
+                if (textoInput && !Number.isNaN(colIdx)) {
+                    editedTexts[colIdx] = textoInput.value.trim();
+                }
+                if (notaInput && codigo && notaInput.value.trim() !== "") {
+                    ceNotas[codigo] = notaInput.value.trim();
+                }
+            });
+
+            const criteriosActualizados = currentCriteriosState.criterios.map((c) =>
+                Object.prototype.hasOwnProperty.call(editedTexts, c.colIdx)
+                    ? { ...c, texto: editedTexts[c.colIdx] }
+                    : c
+            );
+
+            try {
+                saveCriteriosButton.disabled = true;
+                showMessage("Guardando criterios...", "info");
+                await window.electronExcel.saveRraaCriterios({
+                    rraa: currentCriteriosState.rraa,
+                    criterios: criteriosActualizados,
+                    ponderacionesUnidad: currentCriteriosState.ponderacionesUnidad
+                });
+                currentCriteriosState.criterios = criteriosActualizados;
+
+                if (Object.keys(ceNotas).length > 0 && currentState) {
+                    const data = await window.electronExcel.saveCeNotas({
+                        unidad: currentState.unidad,
+                        tipo: currentState.tipo,
+                        actividad: currentState.actividad,
+                        ceNotas
+                    });
+                    if (data) {
+                        currentState = data;
+                        currentNotes = (data.notas || []).map((item) => ({ ...item }));
+                        const savedKey = `${currentState.unidad}:${currentState.tipo}:${currentState.actividad}`;
+                        _notasCache.set(savedKey, data);
+                    }
+                }
+
+                showMessage("Criterios guardados correctamente.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudieron guardar los criterios.", "error");
+            } finally {
+                saveCriteriosButton.disabled = false;
+            }
+        }
+
+        function clearNotas() {
+            currentNotes = currentNotes.map((item) => ({ ...item, nota: "" }));
+            renderSummary(currentState);
+            renderTable();
+            marcarCambio();
+        }
+
+        function parsePastedGrades(text) {
+            return String(text || "")
+                .replace(/\r/g, "")
+                .split("\n")
+                .map((line) => line.split("\t")[0].trim())
+                .filter((value, idx, values) => value !== "" || idx < values.length - 1);
+        }
+
+        function applyPastedGrades(startIdx, values) {
+            if (startIdx < 0 || !values.length) {
+                return;
+            }
+
+            let applied = 0;
+            values.forEach((value, offset) => {
+                const noteIdx = startIdx + offset;
+                if (!currentNotes[noteIdx]) {
+                    return;
+                }
+                currentNotes[noteIdx].nota = value;
+                applied += 1;
+            });
+
+            renderSummary(currentState);
+            renderTable();
+            marcarCambio();
+            showMessage(`Pegadas ${applied} nota(s). Revisa los errores marcados antes de guardar.`, "info");
+
+            const nextInput = notasBody.querySelectorAll(".nota-input")[startIdx + applied - 1];
+            if (nextInput) {
+                nextInput.focus();
+                nextInput.select();
+            }
+        }
+
+        function getNotesStats() {
+            return currentNotes.reduce((stats, item) => {
+                const validation = validateGrade(item.nota);
+                stats.total += 1;
+                if (validation.isInvalid) {
+                    stats.invalid += 1;
+                } else if (validation.isEmpty) {
+                    stats.pending += 1;
+                } else {
+                    stats.graded += 1;
+                }
+                return stats;
+            }, { total: 0, graded: 0, pending: 0, invalid: 0 });
+        }
+
+        function updateNoteValidation(rowIdx, input) {
+            const validation = validateGrade(input.value);
+            const row = input.closest("tr");
+            const cell = input.closest("td");
+            const previousHelp = cell.querySelector(".note-help");
+
+            input.classList.toggle("invalid", validation.isInvalid);
+            input.title = validation.message || "Pega una columna de Excel aqui para rellenar hacia abajo";
+            row.classList.toggle("invalid-note", validation.isInvalid);
+            row.classList.toggle("pending-note", validation.isEmpty && !validation.isInvalid);
+
+            if (previousHelp) {
+                previousHelp.remove();
+            }
+
+            if (validation.message) {
+                const help = document.createElement("span");
+                help.className = "note-help";
+                help.textContent = validation.message;
+                cell.appendChild(help);
+            }
+        }
+
+        function validateGrade(value) {
+            const raw = String(value ?? "").trim();
+            if (raw === "") {
+                return { isEmpty: true, isInvalid: false, message: "" };
+            }
+
+            if (!/^\d{1,2}([,.]\d{1,2})?$/.test(raw)) {
+                return { isEmpty: false, isInvalid: true, message: "Usa un numero de 0 a 10" };
+            }
+
+            const numeric = Number(raw.replace(",", "."));
+            if (Number.isNaN(numeric) || numeric < 0 || numeric > 10) {
+                return { isEmpty: false, isInvalid: true, message: "La nota debe estar entre 0 y 10" };
+            }
+
+            return { isEmpty: false, isInvalid: false, message: "" };
+        }
+
+        function marcarCambio() {
+            hayCambiosSinGuardar = true;
+
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+            }
+
+            autoSaveTimeout = setTimeout(() => {
+                guardarCambiosAutomaticamente();
+            }, AUTO_SAVE_DELAY_MS);
+        }
+
+        async function guardarCambiosAutomaticamente() {
+            if (!hayCambiosSinGuardar || !window.electronExcel) {
+                return true;
+            }
+
+            showMessage("Autoguardando notas...", "info");
+            return saveNotas({ silent: true });
+        }
+
+        async function guardarCambiosAntesDeCerrar() {
+            if (!hayCambiosSinGuardar || !window.electronExcel) {
+                return true;
+            }
+
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = null;
+            }
+
+            showMessage("Guardando notas antes de cerrar...", "info");
+            return saveNotas({ silent: true });
+        }
+
+        window.guardarCambiosAntesDeCerrar = guardarCambiosAntesDeCerrar;
+
+        function setDisabled(disabled) {
+            [unidadSelect, tipoSelect, actividadSelect, activityTitleInput, includedInput, saveButton, reloadButton, clearButton, saveCriteriosButton].forEach((element) => {
+                element.disabled = disabled;
+            });
+        }
+
+        function showMessage(text, type) {
+            messageBox.textContent = text;
+            messageBox.className = `message ${type} show`;
+        }
+
+        function escapeHtml(value) {
+            return String(value || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

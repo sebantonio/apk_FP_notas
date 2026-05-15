@@ -1,0 +1,593 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diario de Actividades</title>
+    <script src="xlsx.full.min.js"></script><script src="app-bridge.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #f3f6fb;
+            --panel: #ffffff;
+            --text: #172033;
+            --muted: #61708a;
+            --line: #d8e1ee;
+            --primary: #6366f1;
+            --primary-dark: #4338ca;
+            --danger: #dc2626;
+            --ok: #16a34a;
+            --warning: #b45309;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text);
+            background: var(--bg);
+            padding: 22px;
+        }
+
+        .shell { width: min(1200px, 100%); margin: 0 auto; }
+
+        .page-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+
+        .nav-button {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 16px; border-radius: 8px; border: 1.5px solid var(--line);
+            background: var(--panel); color: var(--text); font-size: 0.88rem;
+            font-weight: 500; cursor: pointer; text-decoration: none;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .nav-button:hover { border-color: var(--primary); background: #f0f0ff; }
+
+        .page-header { margin-bottom: 18px; }
+        .page-header h1 { font-size: 1.5rem; font-weight: 700; }
+        .module-name { font-size: 0.88rem; color: var(--muted); margin-top: 3px; }
+
+        /* Layout principal: izquierda estrecha | derecha ancha */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 18px;
+            align-items: start;
+        }
+
+        /* Columna izquierda: calendario + resumen entradas */
+        .left-col { display: flex; flex-direction: column; gap: 14px; }
+
+        /* Columna derecha: formulario + entradas */
+        .right-col { display: flex; flex-direction: column; gap: 14px; }
+
+        .card {
+            background: var(--panel);
+            border-radius: 12px;
+            border: 1.5px solid var(--line);
+            padding: 16px;
+        }
+
+        .card-title {
+            font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
+        }
+
+        /* ── Calendario compacto ── */
+        .calendar-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;
+        }
+        .calendar-header button {
+            background: none; border: none; cursor: pointer; font-size: 1rem;
+            color: var(--muted); padding: 3px 7px; border-radius: 5px;
+        }
+        .calendar-header button:hover { background: #f0f0ff; color: var(--primary); }
+        .calendar-month-label { font-weight: 600; font-size: 0.85rem; color: var(--text); }
+
+        .calendar-grid {
+            display: grid; grid-template-columns: repeat(7, 1fr);
+            gap: 1px; text-align: center;
+        }
+        .cal-day-name { font-size: 0.65rem; font-weight: 600; color: var(--muted); padding: 3px 0; }
+        .cal-day {
+            aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; border-radius: 5px; cursor: pointer;
+            border: 1.5px solid transparent; transition: background 0.1s, border-color 0.1s;
+        }
+        .cal-day:hover:not(.empty) { background: #f0f0ff; border-color: var(--primary); }
+        .cal-day.empty { cursor: default; }
+        .cal-day.today { background: #ede9fe; color: var(--primary); font-weight: 700; }
+        .cal-day.selected { background: var(--primary); color: #fff; border-color: var(--primary-dark); }
+        .cal-day.has-entries { position: relative; }
+        .cal-day.has-entries::after {
+            content: ''; position: absolute; bottom: 2px; left: 50%;
+            transform: translateX(-50%); width: 3px; height: 3px;
+            border-radius: 50%; background: var(--ok);
+        }
+        .cal-day.selected.has-entries::after { background: #fff; }
+
+        /* ── Hora ── */
+        .hora-selector { margin-top: 12px; }
+        .hora-selector label { font-size: 0.75rem; color: var(--muted); font-weight: 600; display: block; margin-bottom: 6px; }
+        .hora-buttons { display: flex; gap: 5px; flex-wrap: wrap; }
+        .hora-btn {
+            padding: 4px 10px; border-radius: 6px; border: 1.5px solid var(--line);
+            background: var(--panel); color: var(--text); font-size: 0.78rem; cursor: pointer;
+            transition: all 0.1s;
+        }
+        .hora-btn:hover { border-color: var(--primary); background: #f0f0ff; }
+        .hora-btn.active { background: var(--primary); color: #fff; border-color: var(--primary-dark); }
+
+        /* ── Mini resumen entradas (izquierda debajo de calendario) ── */
+        .mini-entries { }
+        .mini-entry {
+            display: flex; align-items: flex-start; gap: 8px;
+            padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.8rem;
+        }
+        .mini-entry:last-child { border-bottom: none; }
+        .mini-hora {
+            background: #ede9fe; color: var(--primary-dark); font-size: 0.7rem;
+            font-weight: 700; padding: 1px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0;
+        }
+        .mini-text { color: var(--text); line-height: 1.4; flex: 1; overflow: hidden;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .mini-empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 10px 0; }
+        .mini-date-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 8px; }
+        .mini-date-label span { font-weight: 700; color: var(--primary); }
+
+        /* ── Formulario ── */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-grid .full { grid-column: 1 / -1; }
+
+        .form-group { margin-bottom: 0; }
+        .form-group label { font-size: 0.78rem; color: var(--muted); font-weight: 600; display: block; margin-bottom: 5px; }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%; padding: 8px 11px; border-radius: 8px; border: 1.5px solid var(--line);
+            font-family: inherit; font-size: 0.88rem; color: var(--text);
+            background: #fafcff; transition: border-color 0.15s; resize: none;
+        }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none; border-color: var(--primary); background: #fff;
+        }
+        .form-group input[readonly] { background: #f3f6fb; color: var(--muted); cursor: default; }
+
+        /* Estado del grupo: botones pill */
+        .estado-buttons { display: flex; gap: 6px; }
+        .estado-btn {
+            flex: 1; padding: 7px 6px; border-radius: 8px; border: 1.5px solid var(--line);
+            background: var(--panel); font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            text-align: center; transition: all 0.12s;
+        }
+        .estado-btn[data-estado="Bueno"]:hover,
+        .estado-btn[data-estado="Bueno"].active { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+        .estado-btn[data-estado="Normal"]:hover,
+        .estado-btn[data-estado="Normal"].active { background: #fef9c3; border-color: #ca8a04; color: #92400e; }
+        .estado-btn[data-estado="Difícil"]:hover,
+        .estado-btn[data-estado="Difícil"].active { background: #fee2e2; border-color: #dc2626; color: #b91c1c; }
+
+        /* Incidencias */
+        .incidencia-toggle {
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            font-size: 0.82rem; font-weight: 600; color: var(--muted);
+            margin-bottom: 8px;
+        }
+        .incidencia-toggle input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--danger); cursor: pointer; }
+        .incidencia-toggle.active { color: var(--danger); }
+        .incidencia-detail { display: none; }
+        .incidencia-detail.show { display: flex; flex-direction: column; gap: 8px; }
+
+        .btn-primary {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 10px 22px; border-radius: 9px; border: none;
+            background: var(--primary); color: #fff; font-size: 0.9rem; font-weight: 600;
+            cursor: pointer; transition: background 0.15s; width: 100%;
+        }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Entradas completas (derecha) ── */
+        .entry-item {
+            border: 1.5px solid var(--line); border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 10px; position: relative;
+        }
+        .entry-item:last-child { margin-bottom: 0; }
+        .entry-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+        .entry-hora {
+            background: #ede9fe; color: var(--primary-dark);
+            font-size: 0.72rem; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+        }
+        .entry-badge {
+            font-size: 0.7rem; font-weight: 600; padding: 2px 7px; border-radius: 4px;
+        }
+        .badge-bueno { background: #dcfce7; color: #15803d; }
+        .badge-normal { background: #fef9c3; color: #92400e; }
+        .badge-dificil { background: #fee2e2; color: #b91c1c; }
+        .badge-incidencia { background: #fee2e2; color: #b91c1c; }
+        .entry-text { font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; margin-bottom: 4px; }
+        .entry-extra { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+        .entry-extra span { font-weight: 600; color: var(--text); }
+        .entry-delete {
+            position: absolute; top: 8px; right: 10px; background: none; border: none;
+            cursor: pointer; color: var(--muted); font-size: 0.82rem; padding: 2px 5px; border-radius: 5px;
+        }
+        .entry-delete:hover { background: #fee2e2; color: var(--danger); }
+
+        .entries-empty { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 20px 0; }
+
+        .toast {
+            position: fixed; bottom: 20px; right: 20px; background: var(--ok); color: #fff;
+            padding: 9px 18px; border-radius: 9px; font-size: 0.85rem; font-weight: 600;
+            opacity: 0; transform: translateY(6px); transition: opacity 0.22s, transform 0.22s;
+            pointer-events: none; z-index: 100;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { background: var(--danger); }
+
+        .selected-date-display { font-weight: 700; color: var(--primary); }
+        #selectedDateLabel { font-size: 0.84rem; color: var(--muted); margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <nav class="page-nav">
+        <a href="index.html" class="nav-button">← Inicio</a>
+    </nav>
+
+    <div class="page-header">
+        <h1>📓 Diario de Actividades</h1>
+        <div class="module-name" id="moduleNameDisplay">Módulo: —</div>
+    </div>
+
+    <div class="main-layout">
+
+        <!-- ── Columna izquierda ── -->
+        <div class="left-col">
+
+            <!-- Calendario compacto -->
+            <div class="card">
+                <div class="card-title">Fecha</div>
+                <div class="calendar-header">
+                    <button id="prevMonth">‹</button>
+                    <span class="calendar-month-label" id="calMonthLabel"></span>
+                    <button id="nextMonth">›</button>
+                </div>
+                <div class="calendar-grid" id="calGrid"></div>
+
+                <div class="hora-selector">
+                    <label>Hora de clase</label>
+                    <div class="hora-buttons" id="horaButtons">
+                        <button class="hora-btn" data-hora="1ª">1ª</button>
+                        <button class="hora-btn" data-hora="2ª">2ª</button>
+                        <button class="hora-btn" data-hora="3ª">3ª</button>
+                        <button class="hora-btn" data-hora="4ª">4ª</button>
+                        <button class="hora-btn" data-hora="5ª">5ª</button>
+                        <button class="hora-btn" data-hora="6ª">6ª</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mini-resumen entradas del día -->
+            <div class="card mini-entries">
+                <div class="card-title">Entradas del día</div>
+                <div id="miniDateLabel" class="mini-date-label">—</div>
+                <div id="miniEntriesList"></div>
+            </div>
+
+        </div>
+
+        <!-- ── Columna derecha ── -->
+        <div class="right-col">
+
+            <!-- Formulario nueva entrada -->
+            <div class="card">
+                <div class="card-title">Nueva entrada</div>
+                <div class="form-grid">
+
+                    <div class="form-group">
+                        <label>Fecha</label>
+                        <input type="text" id="selectedDateInput" readonly placeholder="Selecciona un día">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Módulo</label>
+                        <input type="text" id="moduleInput" readonly>
+                    </div>
+
+                    <div class="form-group full">
+                        <label>Actividad realizada</label>
+                        <textarea id="actividadInput" rows="4" placeholder="Describe la actividad realizada en esta sesión…"></textarea>
+                    </div>
+
+                    <div class="form-group full">
+                        <label>Tarea para casa <span style="font-weight:400;color:var(--muted)">(opcional)</span></label>
+                        <input type="text" id="tareaInput" placeholder="Ej: Ejercicios 3 y 4 del tema 2…">
+                    </div>
+
+                    <div class="form-group full">
+                        <label>Estado del grupo</label>
+                        <div class="estado-buttons">
+                            <button class="estado-btn" data-estado="Bueno">😊 Bueno</button>
+                            <button class="estado-btn" data-estado="Normal">😐 Normal</button>
+                            <button class="estado-btn" data-estado="Difícil">😤 Difícil</button>
+                        </div>
+                    </div>
+
+                    <!-- Incidencias -->
+                    <div class="form-group full">
+                        <label class="incidencia-toggle" id="incidenciaToggleLabel">
+                            <input type="checkbox" id="incidenciaCheck">
+                            ⚠️ Registrar incidencia
+                        </label>
+                        <div class="incidencia-detail" id="incidenciaDetail">
+                            <div class="form-group">
+                                <label>Tipo de incidencia</label>
+                                <select id="incidenciaTipo">
+                                    <option value="">— Selecciona —</option>
+                                    <option>Comportamiento disruptivo</option>
+                                    <option>Falta de respeto al docente</option>
+                                    <option>Falta de respeto entre alumnos</option>
+                                    <option>Uso indebido del móvil</option>
+                                    <option>Falta de material</option>
+                                    <option>Copiando en examen/actividad</option>
+                                    <option>Abandono del aula sin permiso</option>
+                                    <option>Retraso reiterado</option>
+                                    <option>Negativa a trabajar</option>
+                                    <option>Problema técnico (equipo/red)</option>
+                                    <option>Otra</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Alumno/s afectado/s <span style="font-weight:400;color:var(--muted)">(opcional)</span></label>
+                                <input type="text" id="incidenciaAlumno" placeholder="Nombre o nombres…">
+                            </div>
+                            <div class="form-group">
+                                <label>Descripción <span style="font-weight:400;color:var(--muted)">(opcional)</span></label>
+                                <textarea id="incidenciaDesc" rows="2" placeholder="Detalle de la incidencia…"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group full">
+                        <button class="btn-primary" id="saveBtn" disabled>Guardar entrada</button>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Entradas completas del día -->
+            <div class="card">
+                <div class="card-title">Historial del día</div>
+                <div id="selectedDateLabel">Selecciona un día en el calendario</div>
+                <div id="entriesList"></div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(async function () {
+    const bridge = window.electronExcel;
+
+    let today = new Date();
+    let viewYear = today.getFullYear();
+    let viewMonth = today.getMonth();
+    let selectedDate = null;
+    let selectedHora = null;
+    let selectedEstado = null;
+    let moduleName = '';
+    let allEntries = [];
+
+    async function init() {
+        if (!bridge) { showToast('No hay conexión con el archivo Excel.', true); return; }
+        try {
+            const res = await bridge.getDiarioData();
+            moduleName = res.modulo || '';
+            allEntries = res.entradas || [];
+        } catch (e) {
+            // sin archivo seleccionado: continuar sin módulo
+        }
+        document.getElementById('moduleNameDisplay').textContent = 'Módulo: ' + (moduleName || '—');
+        document.getElementById('moduleInput').value = moduleName;
+        // Pre-seleccionar primera hora
+        const firstHora = document.querySelector('.hora-btn');
+        if (firstHora) { firstHora.classList.add('active'); selectedHora = firstHora.dataset.hora; }
+        renderCalendar();
+        selectDate(formatDate(today));
+    }
+
+    const DAY_NAMES = ['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
+    const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    function formatDate(d) {
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    function datesWithEntries() { return new Set(allEntries.map(e => e.fecha)); }
+
+    function renderCalendar() {
+        document.getElementById('calMonthLabel').textContent = `${MONTH_NAMES[viewMonth]} ${viewYear}`;
+        const grid = document.getElementById('calGrid');
+        grid.innerHTML = '';
+        DAY_NAMES.forEach(n => {
+            const el = document.createElement('div');
+            el.className = 'cal-day-name'; el.textContent = n; grid.appendChild(el);
+        });
+        const firstDay = new Date(viewYear, viewMonth, 1);
+        const startOffset = (firstDay.getDay() + 6) % 7;
+        const totalDays = new Date(viewYear, viewMonth + 1, 0).getDate();
+        const todayStr = formatDate(today);
+        const withEntries = datesWithEntries();
+        for (let i = 0; i < startOffset; i++) {
+            const el = document.createElement('div'); el.className = 'cal-day empty'; grid.appendChild(el);
+        }
+        for (let d = 1; d <= totalDays; d++) {
+            const dateStr = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const el = document.createElement('div'); el.className = 'cal-day'; el.textContent = d;
+            if (dateStr === todayStr) el.classList.add('today');
+            if (dateStr === selectedDate) el.classList.add('selected');
+            if (withEntries.has(dateStr)) el.classList.add('has-entries');
+            el.addEventListener('click', () => selectDate(dateStr));
+            grid.appendChild(el);
+        }
+    }
+
+    function selectDate(dateStr) {
+        selectedDate = dateStr;
+        document.getElementById('selectedDateInput').value = dateStr;
+        renderCalendar();
+        renderMiniEntries();
+        renderEntries();
+        updateSaveBtn();
+    }
+
+    document.getElementById('prevMonth').addEventListener('click', () => {
+        if (--viewMonth < 0) { viewMonth = 11; viewYear--; } renderCalendar();
+    });
+    document.getElementById('nextMonth').addEventListener('click', () => {
+        if (++viewMonth > 11) { viewMonth = 0; viewYear++; } renderCalendar();
+    });
+
+    // Hora
+    document.getElementById('horaButtons').addEventListener('click', e => {
+        const btn = e.target.closest('.hora-btn'); if (!btn) return;
+        document.querySelectorAll('.hora-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active'); selectedHora = btn.dataset.hora; updateSaveBtn();
+    });
+
+    // Estado grupo
+    document.querySelectorAll('.estado-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.estado-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active'); selectedEstado = btn.dataset.estado;
+        });
+    });
+
+    // Incidencias toggle
+    document.getElementById('incidenciaCheck').addEventListener('change', function () {
+        const detail = document.getElementById('incidenciaDetail');
+        const label = document.getElementById('incidenciaToggleLabel');
+        if (this.checked) { detail.classList.add('show'); label.classList.add('active'); }
+        else { detail.classList.remove('show'); label.classList.remove('active'); }
+    });
+
+    function updateSaveBtn() {
+        const ok = selectedDate && selectedHora && document.getElementById('actividadInput').value.trim();
+        document.getElementById('saveBtn').disabled = !ok;
+    }
+    document.getElementById('actividadInput').addEventListener('input', updateSaveBtn);
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+        const texto = document.getElementById('actividadInput').value.trim();
+        if (!selectedDate || !selectedHora || !texto) return;
+        const tieneIncidencia = document.getElementById('incidenciaCheck').checked;
+        const payload = {
+            fecha: selectedDate,
+            hora: selectedHora,
+            modulo: moduleName,
+            texto,
+            tarea: document.getElementById('tareaInput').value.trim(),
+            estado: selectedEstado || '',
+            incidencia: tieneIncidencia ? '1' : '',
+            incidenciaTipo: tieneIncidencia ? document.getElementById('incidenciaTipo').value : '',
+            incidenciaAlumno: tieneIncidencia ? document.getElementById('incidenciaAlumno').value.trim() : '',
+            incidenciaDesc: tieneIncidencia ? document.getElementById('incidenciaDesc').value.trim() : '',
+        };
+        document.getElementById('saveBtn').disabled = true;
+        try {
+            const res = await bridge.saveDiarioEntrada(payload);
+            allEntries = res.entradas || allEntries;
+            // Reset form
+            document.getElementById('actividadInput').value = '';
+            document.getElementById('tareaInput').value = '';
+            document.getElementById('incidenciaCheck').checked = false;
+            document.getElementById('incidenciaDetail').classList.remove('show');
+            document.getElementById('incidenciaToggleLabel').classList.remove('active');
+            document.getElementById('incidenciaTipo').value = '';
+            document.getElementById('incidenciaAlumno').value = '';
+            document.getElementById('incidenciaDesc').value = '';
+            selectedHora = null; selectedEstado = null;
+            document.querySelectorAll('.hora-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.estado-btn').forEach(b => b.classList.remove('active'));
+            renderCalendar(); renderMiniEntries(); renderEntries();
+            showToast('Entrada guardada.');
+        } catch (e) { showToast('Error al guardar: ' + e, true); }
+        updateSaveBtn();
+    });
+
+    // Mini entradas (izquierda)
+    function renderMiniEntries() {
+        const list = document.getElementById('miniEntriesList');
+        const label = document.getElementById('miniDateLabel');
+        if (!selectedDate) { label.innerHTML = '—'; list.innerHTML = ''; return; }
+        const [y,m,d] = selectedDate.split('-');
+        label.innerHTML = `<span>${d}/${m}/${y}</span>`;
+        const day = allEntries.filter(e => e.fecha === selectedDate);
+        if (!day.length) { list.innerHTML = '<div class="mini-empty">Sin entradas</div>'; return; }
+        list.innerHTML = '';
+        day.forEach(e => {
+            const el = document.createElement('div'); el.className = 'mini-entry';
+            el.innerHTML = `<span class="mini-hora">${e.hora}</span><span class="mini-text">${escapeHtml(e.texto)}</span>`;
+            list.appendChild(el);
+        });
+    }
+
+    // Entradas completas (derecha)
+    function renderEntries() {
+        const container = document.getElementById('entriesList');
+        const label = document.getElementById('selectedDateLabel');
+        if (!selectedDate) { label.innerHTML = 'Selecciona un día en el calendario'; container.innerHTML = ''; return; }
+        const [y,m,d] = selectedDate.split('-');
+        label.innerHTML = `Historial del <span class="selected-date-display">${d}/${m}/${y}</span>`;
+        const day = allEntries.filter(e => e.fecha === selectedDate);
+        if (!day.length) { container.innerHTML = '<div class="entries-empty">No hay entradas para este día.</div>'; return; }
+        container.innerHTML = '';
+        day.forEach(entry => {
+            const estadoClass = entry.estado === 'Bueno' ? 'badge-bueno' : entry.estado === 'Normal' ? 'badge-normal' : entry.estado === 'Difícil' ? 'badge-dificil' : '';
+            const estadoBadge = entry.estado ? `<span class="entry-badge ${estadoClass}">${entry.estado}</span>` : '';
+            const incBadge = entry.incidencia === '1' ? `<span class="entry-badge badge-incidencia">⚠️ Incidencia</span>` : '';
+            let extras = '';
+            if (entry.tarea) extras += `<div class="entry-extra">📋 Tarea: <span>${escapeHtml(entry.tarea)}</span></div>`;
+            if (entry.incidencia === '1' && entry.incidenciaTipo) extras += `<div class="entry-extra">Tipo: <span>${escapeHtml(entry.incidenciaTipo)}</span>${entry.incidenciaAlumno ? ` — <span>${escapeHtml(entry.incidenciaAlumno)}</span>` : ''}</div>`;
+            if (entry.incidenciaDesc) extras += `<div class="entry-extra">📝 <span>${escapeHtml(entry.incidenciaDesc)}</span></div>`;
+
+            const el = document.createElement('div'); el.className = 'entry-item';
+            el.innerHTML = `
+                <div class="entry-meta">
+                    <span class="entry-hora">${entry.hora}</span>
+                    ${estadoBadge}${incBadge}
+                    <span style="font-size:0.72rem;color:var(--muted)">${entry.modulo || moduleName}</span>
+                </div>
+                <div class="entry-text">${escapeHtml(entry.texto)}</div>
+                ${extras}
+                <button class="entry-delete" title="Eliminar">✕</button>
+            `;
+            el.querySelector('.entry-delete').addEventListener('click', async () => {
+                try {
+                    const res = await bridge.deleteDiarioEntrada({ fila: entry.fila });
+                    allEntries = res.entradas || allEntries;
+                    renderCalendar(); renderMiniEntries(); renderEntries();
+                    showToast('Entrada eliminada.');
+                } catch (e) { showToast('Error: ' + e, true); }
+            });
+            container.appendChild(el);
+        });
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function showToast(msg, isError = false) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'toast' + (isError ? ' error' : '') + ' show';
+        setTimeout(() => t.className = 'toast' + (isError ? ' error' : ''), 2500);
+    }
+
+    init();
+})();
+</script>
+</body>
+</html>

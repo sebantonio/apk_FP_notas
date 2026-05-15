@@ -1,0 +1,649 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notas RRAA y CCEE</title>
+    <script src="xlsx.full.min.js"></script><script src="app-bridge.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            padding: 20px;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: #f3f6fb;
+            color: #1f2937;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            overflow: hidden;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 14px 42px rgba(31,41,55,0.18);
+        }
+
+        .page-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f8f9ff;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .nav-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .nav-button,
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.92em;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .nav-button {
+            color: #6366f1;
+            background: white;
+            border: 2px solid #6366f1;
+            cursor: pointer;
+        }
+
+        .nav-link {
+            color: white;
+            background: #6366f1;
+            border: 2px solid #6366f1;
+        }
+
+        .header {
+            padding: 28px 30px;
+            color: white;
+            background: #3730a3;
+        }
+
+        .header h1 {
+            margin-bottom: 6px;
+            font-size: 2em;
+        }
+
+        .header p {
+            opacity: 0.92;
+        }
+
+        .content {
+            padding: 24px;
+        }
+
+        .message {
+            display: none;
+            margin-bottom: 16px;
+            padding: 13px 16px;
+            border-radius: 6px;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.info {
+            color: #0c5460;
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+
+        .message.error {
+            color: #721c24;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.success {
+            color: #155724;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+
+        .toolbar {
+            display: grid;
+            grid-template-columns: minmax(180px, 260px) minmax(240px, 1fr) auto;
+            gap: 12px;
+            align-items: end;
+            margin-bottom: 18px;
+            padding: 16px;
+            background: #f8f9ff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #4b5563;
+            font-size: 0.88em;
+            font-weight: 700;
+        }
+
+        select,
+        input {
+            width: 100%;
+            min-height: 40px;
+            padding: 8px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font: inherit;
+            background: white;
+        }
+
+        button {
+            min-height: 40px;
+            padding: 9px 16px;
+            color: white;
+            font: inherit;
+            font-weight: 700;
+            background: #6366f1;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .stat {
+            padding: 14px;
+            background: #f8f9ff;
+            border-left: 4px solid #6366f1;
+            border-radius: 8px;
+        }
+
+        .stat span {
+            display: block;
+            margin-bottom: 4px;
+            color: #6b7280;
+            font-size: 0.86em;
+        }
+
+        .stat strong {
+            color: #4f46e5;
+            font-size: 1.3em;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            max-height: 48vh;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            min-width: 960px;
+        }
+
+        th,
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            color: white;
+            background: #6366f1;
+        }
+
+        .student-col {
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            width: 260px;
+            background: white;
+        }
+
+        th.student-col {
+            z-index: 3;
+            background: #4338ca;
+        }
+
+        tr:hover td {
+            background: #f8f9ff;
+        }
+
+        .num {
+            text-align: center;
+            font-weight: 800;
+        }
+
+        .grade {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 44px;
+            min-height: 30px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-weight: 800;
+        }
+
+        .grade.ok {
+            color: #166534;
+            background: #dcfce7;
+        }
+
+        .grade.warn {
+            color: #92400e;
+            background: #fef3c7;
+        }
+
+        .grade.bad {
+            color: #991b1b;
+            background: #fee2e2;
+        }
+
+        .grade.empty {
+            color: #6b7280;
+            background: #f3f4f6;
+        }
+
+        tr.selected td {
+            background: #eef2ff;
+        }
+
+        .detail {
+            margin-top: 20px;
+            padding: 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .detail-selector {
+            min-width: 240px;
+        }
+
+        .criteria-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 10px;
+        }
+
+        .criterion-card {
+            padding: 10px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        .criterion-card span {
+            display: block;
+            margin-bottom: 6px;
+            color: #6b7280;
+            font-size: 0.82em;
+            font-weight: 700;
+        }
+
+        @media (max-width: 800px) {
+            body {
+                padding: 10px;
+            }
+
+            .content {
+                padding: 16px;
+            }
+
+            .toolbar {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="page-nav" aria-label="Navegacion">
+            <div class="nav-group">
+                <button class="nav-button" type="button" onclick="window.history.back()">Atras</button>
+                <a class="nav-link" href="index.html">Inicio</a>
+            </div>
+            <div class="nav-group">
+                <a class="nav-link" href="gestor-notas.html">Introducir notas</a>
+                <a class="nav-link" href="visor-actividades.html">Actividades</a>
+            </div>
+        </nav>
+
+        <header class="header">
+            <h1>Notas RRAA y CCEE</h1>
+            <p id="subtitle">Vista de consulta de evaluaciones, resultados de aprendizaje y criterios</p>
+        </header>
+
+        <main class="content">
+            <div id="message" class="message"></div>
+
+            <section class="toolbar" aria-label="Filtros">
+                <div>
+                    <label for="evaluationSelect">Evaluacion</label>
+                    <select id="evaluationSelect">
+                        <option value="1">1 EVA</option>
+                        <option value="2">2 EVA</option>
+                        <option value="2solo">2 EVA solo</option>
+                        <option value="3">3 EVA</option>
+                        <option value="3solo">3 EVA solo</option>
+                        <option value="final">Final</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="searchInput">Buscar alumno</label>
+                    <input id="searchInput" type="search" placeholder="Nombre del alumno">
+                </div>
+                <button type="button" id="reloadButton">Recargar</button>
+            </section>
+
+            <section class="stats" aria-label="Resumen">
+                <div class="stat">
+                    <span>Archivo</span>
+                    <strong id="fileName">-</strong>
+                </div>
+                <div class="stat">
+                    <span>Alumnos</span>
+                    <strong id="studentCount">0</strong>
+                </div>
+                <div class="stat">
+                    <span>Aprobados</span>
+                    <strong id="passedCount">0</strong>
+                </div>
+                <div class="stat">
+                    <span>Media</span>
+                    <strong id="averageGrade">-</strong>
+                </div>
+            </section>
+
+            <section class="table-wrap" aria-label="Tabla de notas">
+                <table>
+                    <thead id="notesHead"></thead>
+                    <tbody id="notesBody"></tbody>
+                </table>
+            </section>
+
+            <section class="detail" aria-label="Detalle del alumno">
+                <div class="detail-header">
+                    <div>
+                        <h2 id="detailName">Selecciona un alumno</h2>
+                        <p id="detailFinal">Nota final: -</p>
+                    </div>
+                    <div class="detail-selector">
+                        <label for="raDetailSelect">Ver criterios de</label>
+                        <select id="raDetailSelect"></select>
+                    </div>
+                </div>
+                <div id="criteriaGrid" class="criteria-grid"></div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let state = null;
+        let selectedRowIdx = null;
+        let selectedRaColIdx = null;
+
+        const messageBox = document.getElementById("message");
+        const evaluationSelect = document.getElementById("evaluationSelect");
+        const searchInput = document.getElementById("searchInput");
+        const reloadButton = document.getElementById("reloadButton");
+        const notesHead = document.getElementById("notesHead");
+        const notesBody = document.getElementById("notesBody");
+        const fileName = document.getElementById("fileName");
+        const studentCount = document.getElementById("studentCount");
+        const passedCount = document.getElementById("passedCount");
+        const averageGrade = document.getElementById("averageGrade");
+        const subtitle = document.getElementById("subtitle");
+        const detailName = document.getElementById("detailName");
+        const detailFinal = document.getElementById("detailFinal");
+        const raDetailSelect = document.getElementById("raDetailSelect");
+        const criteriaGrid = document.getElementById("criteriaGrid");
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (!window.electronExcel) {
+                showMessage("Abre esta pantalla desde la aplicacion local de Electron.", "error");
+                return;
+            }
+
+            reloadButton.addEventListener("click", loadNotes);
+            searchInput.addEventListener("input", renderTable);
+            evaluationSelect.addEventListener("change", loadNotes);
+            raDetailSelect.addEventListener("change", () => {
+                selectedRaColIdx = Number(raDetailSelect.value);
+                renderDetail();
+            });
+            loadNotes();
+        });
+
+        async function loadNotes() {
+            try {
+                showMessage("Leyendo hoja de evaluacion...", "info");
+                const data = await window.electronExcel.getNotasEvaluacion({
+                    evaluacion: evaluationSelect.value
+                });
+
+                if (!data) {
+                    showMessage("No se encontro el Excel en el directorio de la app.", "error");
+                    return;
+                }
+
+                state = data;
+                selectedRowIdx = data.alumnos && data.alumnos[0] ? data.alumnos[0].rowIdx : null;
+                selectedRaColIdx = data.raColumns && data.raColumns[0] ? data.raColumns[0].colIdx : null;
+                renderAll();
+                showMessage("Notas cargadas correctamente.", "success");
+            } catch (error) {
+                showMessage(error.message || "No se pudieron cargar las notas.", "error");
+            }
+        }
+
+        function renderAll() {
+            subtitle.textContent = `${state.title} - ${state.sheetName}`;
+            fileName.textContent = state.fileName || "-";
+            renderStats();
+            renderTable();
+            renderDetail();
+        }
+
+        function renderStats() {
+            const alumnos = state.alumnos || [];
+            const numeric = alumnos.map((item) => item.final).filter((value) => typeof value === "number");
+            const passed = numeric.filter((value) => value >= 5).length;
+            const average = numeric.length
+                ? numeric.reduce((total, value) => total + value, 0) / numeric.length
+                : null;
+
+            studentCount.textContent = alumnos.length;
+            passedCount.textContent = passed;
+            averageGrade.textContent = average === null ? "-" : formatGrade(average);
+        }
+
+        function getActiveRaColIdxs() {
+            const alumnos = state.alumnos || [];
+            const active = new Set();
+            alumnos.forEach((alumno) => {
+                (alumno.rraa || []).forEach((ra) => {
+                    if (typeof ra.nota === "number" && ra.nota !== 0) active.add(ra.colIdx);
+                });
+            });
+            return active;
+        }
+
+        function renderTable() {
+            if (!state) {
+                return;
+            }
+
+            const activeColIdxs = getActiveRaColIdxs();
+            const raColumns = (state.raColumns || []).filter((ra) => activeColIdxs.has(ra.colIdx));
+
+            notesHead.innerHTML = `
+                <tr>
+                    <th class="student-col">Alumno</th>
+                    ${raColumns.map((ra) => `<th>${escapeHtml(ra.label)}</th>`).join("")}
+                    <th>Final</th>
+                </tr>
+            `;
+
+            const query = normalize(searchInput.value);
+            const alumnos = (state.alumnos || []).filter((item) =>
+                !query || normalize(item.nombre).includes(query)
+            );
+
+            if (!alumnos.length) {
+                notesBody.innerHTML = `<tr><td class="student-col" colspan="${raColumns.length + 2}">No hay alumnos para mostrar.</td></tr>`;
+                return;
+            }
+
+            notesBody.innerHTML = alumnos.map((alumno) => `
+                <tr class="${alumno.rowIdx === selectedRowIdx ? "selected" : ""}" data-row="${alumno.rowIdx}">
+                    <td class="student-col">${escapeHtml(alumno.nombre)}</td>
+                    ${(alumno.rraa || []).filter((ra) => activeColIdxs.has(ra.colIdx)).map((ra) => `<td>${gradeBadge(ra.nota, ra.display)}</td>`).join("")}
+                    <td>${gradeBadge(alumno.final, alumno.finalDisplay)}</td>
+                </tr>
+            `).join("");
+
+            notesBody.querySelectorAll("tr[data-row]").forEach((row) => {
+                row.addEventListener("click", () => {
+                    selectedRowIdx = Number(row.dataset.row);
+                    renderTable();
+                    renderDetail();
+                });
+            });
+        }
+
+        function renderDetail() {
+            if (!state) {
+                return;
+            }
+
+            const alumno = (state.alumnos || []).find((item) => item.rowIdx === selectedRowIdx);
+            if (!alumno) {
+                detailName.textContent = "Selecciona un alumno";
+                detailFinal.textContent = "Nota final: -";
+                raDetailSelect.innerHTML = "";
+                criteriaGrid.innerHTML = "";
+                return;
+            }
+
+            detailName.textContent = alumno.nombre;
+            detailFinal.textContent = `Nota final: ${formatDisplayGrade(alumno.finalDisplay)}`;
+            renderRaSelector(alumno);
+
+            const criterios = (alumno.criterios || []).filter((criterio) =>
+                Number(criterio.raColIdx) === Number(selectedRaColIdx) &&
+                typeof criterio.nota === "number"
+            );
+
+            if (!criterios.length) {
+                criteriaGrid.innerHTML = '<div class="criterion-card"><span>Sin criterios</span>-</div>';
+                return;
+            }
+
+            criteriaGrid.innerHTML = criterios.map((criterio) => `
+                <div class="criterion-card">
+                    <span>${escapeHtml(criterio.codigo)}</span>
+                    ${gradeBadge(criterio.nota, criterio.display)}
+                </div>
+            `).join("");
+        }
+
+        function renderRaSelector(alumno) {
+            const activeColIdxs = getActiveRaColIdxs();
+            const raColumns = (state.raColumns || []).filter((ra) => activeColIdxs.has(ra.colIdx));
+
+            if (!raColumns.some((ra) => Number(ra.colIdx) === Number(selectedRaColIdx))) {
+                selectedRaColIdx = raColumns[0] ? raColumns[0].colIdx : null;
+            }
+
+            raDetailSelect.innerHTML = raColumns.map((ra) => {
+                const summary = (alumno.rraa || []).find((item) => Number(item.colIdx) === Number(ra.colIdx));
+                const label = summary && summary.display ? `${ra.label} - ${formatDisplayGrade(summary.display)}` : ra.label;
+                return `<option value="${ra.colIdx}" ${Number(ra.colIdx) === Number(selectedRaColIdx) ? "selected" : ""}>${escapeHtml(label)}</option>`;
+            }).join("");
+        }
+
+        function gradeBadge(value, display) {
+            const label = formatDisplayGrade(display);
+            let cls = "empty";
+
+            if (typeof value === "number") {
+                if (value >= 5) {
+                    cls = "ok";
+                } else if (value > 0) {
+                    cls = "bad";
+                } else {
+                    cls = "empty";
+                }
+            }
+
+            return `<span class="grade ${cls}">${escapeHtml(label)}</span>`;
+        }
+
+        function formatGrade(value) {
+            return Number(value).toFixed(2).replace(".", ",");
+        }
+
+        function formatDisplayGrade(display) {
+            if (!display && display !== 0) return "-";
+            const n = parseFloat(String(display).replace(",", "."));
+            if (isNaN(n)) return display || "-";
+            return n.toFixed(2).replace(".", ",");
+        }
+
+        function normalize(value) {
+            return String(value || "")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase()
+                .trim();
+        }
+
+        function showMessage(text, type) {
+            messageBox.textContent = text;
+            messageBox.className = `message ${type} show`;
+        }
+
+        function escapeHtml(value) {
+            return String(value || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

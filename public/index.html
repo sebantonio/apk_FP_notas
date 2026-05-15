@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Notas FP</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #f4f7fb;
+            --panel: #ffffff;
+            --panel-soft: #eef4ff;
+            --text: #1f2937;
+            --muted: #5f6f89;
+            --line: #d8e1ee;
+            --primary: #6366f1;
+            --primary-dark: #4338ca;
+            --accent: #4338ca;
+            --warning: #b45309;
+            --shadow: 0 16px 40px rgba(31, 41, 55, 0.12);
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text);
+            background: #f3f6fb;
+            padding: 28px;
+        }
+
+        .shell {
+            width: min(1180px, 100%);
+            margin: 0 auto;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 28px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-mark {
+            width: 48px;
+            height: 48px;
+            display: grid;
+            place-items: center;
+            border-radius: 8px;
+            color: #ffffff;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            font-size: 1.45rem;
+            font-weight: 800;
+            box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
+        }
+
+        .brand h1 {
+            font-size: clamp(1.55rem, 3vw, 2.35rem);
+            line-height: 1.05;
+            letter-spacing: 0;
+        }
+
+        .brand p {
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 0.98rem;
+        }
+
+        .version {
+            flex: 0 0 auto;
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .page-nav {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-button,
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 8px 13px;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+        }
+
+        .nav-button:hover,
+        .nav-link:hover {
+            background: #ffffff;
+            border-color: rgba(37, 99, 235, 0.45);
+            transform: translateY(-1px);
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+            gap: 22px;
+            align-items: stretch;
+            margin-bottom: 22px;
+        }
+
+        .daily-panel,
+        .side-panel,
+        .setup-panel {
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(216, 225, 238, 0.9);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .daily-panel {
+            padding: clamp(24px, 4vw, 38px);
+        }
+
+        .section-kicker {
+            color: var(--accent);
+            font-size: 0.82rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 10px;
+        }
+
+        .daily-panel h2 {
+            max-width: 760px;
+            font-size: clamp(2rem, 5vw, 4rem);
+            line-height: 1;
+            letter-spacing: 0;
+            margin-bottom: 14px;
+        }
+
+        .daily-panel p {
+            max-width: 680px;
+            color: var(--muted);
+            font-size: 1.08rem;
+            line-height: 1.55;
+        }
+
+        .primary-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 14px;
+            margin-top: 28px;
+        }
+
+        .action-card {
+            display: flex;
+            min-height: 148px;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 18px;
+            color: var(--text);
+            text-decoration: none;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .action-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(37, 99, 235, 0.45);
+            box-shadow: 0 14px 30px rgba(37, 99, 235, 0.14);
+        }
+
+        .action-icon {
+            width: 48px;
+            height: 48px;
+            display: grid;
+            place-items: center;
+            background: rgba(37, 99, 235, 0.1);
+            border-radius: 10px;
+            font-size: 1.75rem;
+            font-weight: 800;
+            transition: transform 0.18s ease, background 0.18s ease;
+        }
+
+        .action-card:hover .action-icon {
+            transform: scale(1.1);
+            background: rgba(37, 99, 235, 0.18);
+        }
+
+        .action-card:nth-child(2) .action-icon {
+            background: rgba(180, 83, 9, 0.1);
+        }
+
+        .action-card:nth-child(2):hover .action-icon {
+            background: rgba(180, 83, 9, 0.18);
+        }
+
+        .action-card:nth-child(3) .action-icon {
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .action-card:nth-child(3):hover .action-icon {
+            background: rgba(34, 197, 94, 0.18);
+        }
+
+        .action-card:nth-child(4) .action-icon {
+            background: rgba(15, 118, 110, 0.1);
+        }
+
+        .action-card:nth-child(4):hover .action-icon {
+            background: rgba(15, 118, 110, 0.18);
+        }
+
+        .action-card strong {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 1.12rem;
+        }
+
+        .action-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 0.93rem;
+            line-height: 1.4;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 20px;
+            min-height: 100%;
+            overflow-y: auto;
+        }
+
+        .file-name {
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .recent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .recent-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            background: rgba(37, 99, 235, 0.04);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease;
+            group: 'recent-item';
+        }
+
+        .recent-item:hover {
+            background: rgba(37, 99, 235, 0.1);
+            border-color: rgba(37, 99, 235, 0.25);
+        }
+
+        .recent-item.active-file {
+            background: rgba(37, 99, 235, 0.1);
+            border-color: rgba(37, 99, 235, 0.3);
+        }
+
+        .recent-item-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .recent-item-name {
+            font-size: 0.87rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+
+        .recent-item-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .recent-item:hover .recent-item-actions {
+            opacity: 1;
+        }
+
+        .recent-item-arrow {
+            color: var(--primary);
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+
+        .recent-item-delete {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            color: #dc2626;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+            font-weight: bold;
+        }
+
+        .recent-item-delete:hover {
+            background: rgba(220, 38, 38, 0.1);
+            color: #991b1b;
+        }
+
+        .recent-clear-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            padding: 0;
+            margin-left: 6px;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.15s ease;
+            vertical-align: middle;
+        }
+
+        .recent-clear-btn:hover {
+            background: rgba(220, 38, 38, 0.15);
+        }
+
+        .recent-empty {
+            font-size: 0.87rem;
+            color: var(--muted);
+            font-style: italic;
+        }
+
+        .side-action {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: auto;
+            padding-top: 20px;
+        }
+
+        .side-action-card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            min-height: 118px;
+            padding: 20px;
+            color: var(--text);
+            text-decoration: none;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .side-action-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(37, 99, 235, 0.45);
+            box-shadow: 0 12px 26px rgba(37, 99, 235, 0.12);
+        }
+
+        .side-action-icon {
+            flex: 0 0 auto;
+            width: 64px;
+            height: 64px;
+            display: grid;
+            place-items: center;
+            color: var(--primary-dark);
+            background: rgba(15, 118, 110, 0.1);
+            border-radius: 10px;
+            font-size: 2rem;
+            font-weight: 800;
+        }
+
+        .side-action-card strong,
+        .side-action-card span {
+            display: block;
+        }
+
+        .side-action-card strong {
+            margin-bottom: 6px;
+            font-size: 1.18rem;
+        }
+
+        .side-action-card span {
+            color: var(--muted);
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .online-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 7px 12px;
+            color: var(--primary);
+            background: rgba(37, 99, 235, 0.06);
+            border: 1px solid rgba(37, 99, 235, 0.22);
+            border-radius: 7px;
+            text-decoration: none;
+            font-size: 0.87rem;
+            font-weight: 700;
+            transition: background 0.15s ease;
+        }
+
+        .online-link:hover {
+            background: rgba(37, 99, 235, 0.13);
+        }
+
+        .setup-panel {
+            padding: 22px;
+            margin-bottom: 24px;
+        }
+
+        .setup-header {
+            margin-bottom: 16px;
+        }
+
+        .setup-header h2 {
+            font-size: 1.25rem;
+        }
+
+        .setup-header p {
+            color: var(--muted);
+            font-size: 0.95rem;
+            margin-top: 4px;
+        }
+
+        .small-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 38px;
+            padding: 8px 13px;
+            color: var(--text);
+            background: var(--panel-soft);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.92rem;
+            font-weight: 800;
+            transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+        }
+
+        .small-button:hover {
+            background: #ffffff;
+            border-color: rgba(37, 99, 235, 0.42);
+            transform: translateY(-2px);
+        }
+
+        .workflow {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 18px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+        }
+
+        .step-number {
+            color: var(--primary);
+            font-size: 0.82rem;
+            font-weight: 900;
+            margin-bottom: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            height: 32px;
+            background: rgba(37, 99, 235, 0.1);
+            border-radius: 8px;
+            font-size: 1.2rem;
+        }
+
+        .step h3 {
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+
+        .step p {
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .step .small-button {
+            margin-top: auto;
+        }
+
+        .footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            color: var(--muted);
+            font-size: 0.88rem;
+            padding: 6px 2px;
+        }
+
+        @media (max-width: 920px) {
+            body {
+                padding: 18px;
+            }
+
+            .hero {
+                grid-template-columns: 1fr;
+            }
+
+            .primary-actions,
+            .workflow {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 620px) {
+            .topbar,
+            .footer {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .version {
+                align-self: flex-start;
+            }
+
+            .header-actions,
+            .page-nav {
+                width: 100%;
+            }
+
+            .page-nav .nav-button,
+            .page-nav .nav-link {
+                flex: 1;
+            }
+
+            .primary-actions,
+            .workflow {
+                grid-template-columns: 1fr;
+            }
+
+            .daily-panel,
+            .side-panel,
+            .setup-panel {
+                padding: 18px;
+            }
+
+            .action-card {
+                min-height: 124px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">FP</div>
+                <div>
+                    <h1>Gestor de Notas FP</h1>
+                    <p>Panel de trabajo para el curso actual</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <nav class="page-nav" aria-label="Navegación">
+                    <button class="nav-button" type="button" onclick="window.history.back()">← Atrás</button>
+                    <a class="nav-link" href="index.html">⌂ Inicio</a>
+                </nav>
+                <div class="version">v0.1.0</div>
+            </div>
+        </header>
+
+        <section class="hero" aria-labelledby="daily-title">
+            <div class="daily-panel">
+                <div class="section-kicker">En producción</div>
+                <h2 id="daily-title">Trabajo diario de evaluación</h2>
+                <p>
+                    Accede rápido a las tareas habituales: registrar calificaciones y añadir actividades evaluables.
+                </p>
+
+                <div class="primary-actions">
+                    <a
+                        class="action-card"
+                        href="gestor-notas.html"
+                    >
+                        <div class="action-icon">📝</div>
+                        <div>
+                            <strong>Añadir notas</strong>
+                            <span>Registra la nota final de las actividades por unidad.</span>
+                        </div>
+                    </a>
+
+                    <a
+                        class="action-card"
+                        href="visor-notas.html"
+                    >
+                        <div class="action-icon">👁️</div>
+                        <div>
+                            <strong>Ver notas RRAA y CCEE</strong>
+                            <span>Consulta notas finales, RRAA y criterios por alumno.</span>
+                        </div>
+                    </a>
+
+                    <a
+                        class="action-card"
+                        href="visor-actividades.html"
+                    >
+                        <div class="action-icon">📋</div>
+                        <div>
+                            <strong>Ver notas actividades</strong>
+                            <span>Consulta practicas, memorias, otras actividades y controles por unidad.</span>
+                        </div>
+                    </a>
+
+                    <a
+                        class="action-card"
+                        href="incluir-actividad.html"
+                    >
+                        <div class="action-icon">➕</div>
+                        <div>
+                            <strong>Añadir actividades</strong>
+                            <span>Crea o revisa las actividades evaluables del trimestre.</span>
+                        </div>
+                    </a>
+
+                    <a
+                        class="action-card"
+                        href="visor-unidades.html"
+                    >
+                        <div class="action-icon">🏫</div>
+                        <div>
+                            <strong>Notas por unidad</strong>
+                            <span>Consulta las notas finales por unidad y resumen global de todas las unidades.</span>
+                        </div>
+                    </a>
+
+                </div>
+            </div>
+
+            <aside class="side-panel" aria-labelledby="excel-title">
+                <div>
+                    <div class="section-kicker">Archivo activo</div>
+                    <p class="file-name" id="activeFileName">Cargando...</p>
+                </div>
+
+                <div class="file-actions">
+                    <button class="small-button" type="button" id="changeFileBtn">Cambiar archivo</button>
+                    <a
+                        class="online-link"
+                        href="https://crfpcastilla-my.sharepoint.com/:x:/g/personal/sslm07_educastillalamancha_es/IQCcqkwxp64ZQ7zaAT65YnDDAUq1WmRzaTsFUgF8vd8QcSw?e=MDXWht"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >OneDrive ↗</a>
+                </div>
+
+                <div>
+                    <div class="section-kicker" id="recentKicker" style="display:none">
+                        Recientes
+                        <button class="recent-clear-btn" type="button" id="clearAllRecentBtn" title="Limpiar historial" style="display:none">🗑️</button>
+                    </div>
+                    <div class="recent-list" id="recentFilesList"></div>
+                </div>
+
+                <div class="side-action">
+                    <div class="section-kicker">Diario</div>
+                    <a class="side-action-card" href="diario.html">
+                        <div class="side-action-icon">📓</div>
+                        <div>
+                            <strong>Diario</strong>
+                            <span>Registra las actividades realizadas en cada sesión.</span>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="side-action">
+                    <div class="section-kicker">Informes</div>
+                    <a class="side-action-card" href="informes.html">
+                        <div class="side-action-icon">📊</div>
+                        <div>
+                            <strong>Informes</strong>
+                            <span>Genera informes, gráficos de evolución y vistas imprimibles.</span>
+                        </div>
+                    </a>
+                </div>
+            </aside>
+        </section>
+
+        <section class="setup-panel" aria-labelledby="setup-title">
+            <div class="setup-header">
+                <div>
+                    <div class="section-kicker">Inicio de curso</div>
+                    <h2 id="setup-title">Configuración inicial</h2>
+                    <p>Estas opciones se usan solo al preparar el módulo, por eso quedan como accesos secundarios.</p>
+                </div>
+            </div>
+
+            <div class="workflow" aria-label="Flujo recomendado">
+                <div class="step">
+                    <div class="step-number">👥</div>
+                    <h3>Preparar alumnos</h3>
+                    <p>Carga o actualiza la lista del grupo al principio del curso.</p>
+                    <a class="small-button" href="gestor-alumnos.html">Alumnos</a>
+                </div>
+                <div class="step">
+                    <div class="step-number">⚖️</div>
+                    <h3>Ajustar RRAA y CE</h3>
+                    <p>Revisa criterios, resultados de aprendizaje y ponderaciones.</p>
+                    <a class="small-button" href="gestor-rraa-criterios.html">RRAA y CE</a>
+                </div>
+                <div class="step">
+                    <div class="step-number">📚</div>
+                    <h3>Planificar unidades</h3>
+                    <p>Ordena la programación al inicio y ajusta solo cambios puntuales.</p>
+                    <a class="small-button" href="gestor-unidades.html">Unidades</a>
+                </div>
+                <div class="step">
+                    <div class="step-number">✅</div>
+                    <h3>Evaluar actividades</h3>
+                    <p>Registra notas de forma continuada durante el trimestre.</p>
+                </div>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <span>Gestor de Notas FP</span>
+            <span>Aplicación local con Excel sincronizado</span>
+        </footer>
+    </main>
+
+    <script src="app-bridge.js"></script>
+    <script>
+        const RECENT_KEY = "recentExcelFiles";
+        const MAX_RECENT = 6;
+
+        function getRecentFiles() {
+            try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); }
+            catch { return []; }
+        }
+
+        function saveRecentFile(filePath, fileName) {
+            const recent = getRecentFiles().filter((f) => f.path !== filePath);
+            recent.unshift({ path: filePath, name: fileName });
+            localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
+        }
+
+        function removeRecentFile(filePath) {
+            const recent = getRecentFiles().filter((f) => f.path !== filePath);
+            localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+            renderRecentFiles(null);
+        }
+
+        function clearAllRecentFiles() {
+            if (confirm("¿Deseas eliminar todos los archivos recientes?")) {
+                localStorage.setItem(RECENT_KEY, JSON.stringify([]));
+                renderRecentFiles(null);
+            }
+        }
+
+        async function verifyFileExists(filePath) {
+            if (!window.electronExcel) return true;
+            try {
+                return await window.electronExcel.verifyFileExists(filePath);
+            } catch {
+                return false;
+            }
+        }
+
+        async function renderRecentFiles(activeFilePath) {
+            const recent = getRecentFiles();
+            const list = document.getElementById("recentFilesList");
+            const kicker = document.getElementById("recentKicker");
+            const clearBtn = document.getElementById("clearAllRecentBtn");
+
+            if (!recent.length) {
+                list.innerHTML = `<span class="recent-empty">Ningún archivo abierto aún.</span>`;
+                kicker.style.display = "none";
+                clearBtn.style.display = "none";
+                return;
+            }
+
+            kicker.style.display = "";
+            clearBtn.style.display = recent.length > 1 ? "inline-flex" : "none";
+
+            // Filtrar archivos que existen, manteniendo orden y eliminando los que no
+            const validFiles = [];
+            const filesToRemove = [];
+
+            for (const f of recent) {
+                const exists = await verifyFileExists(f.path);
+                if (exists) {
+                    validFiles.push(f);
+                } else {
+                    filesToRemove.push(f.path);
+                }
+            }
+
+            // Actualizar localStorage si hay archivos que no existen
+            if (filesToRemove.length > 0) {
+                localStorage.setItem(RECENT_KEY, JSON.stringify(validFiles));
+            }
+
+            if (!validFiles.length) {
+                list.innerHTML = `<span class="recent-empty">Ningún archivo abierto aún.</span>`;
+                kicker.style.display = "none";
+                clearBtn.style.display = "none";
+                return;
+            }
+
+            list.innerHTML = validFiles.map((f) => `
+                <div class="recent-item${f.path === activeFilePath ? " active-file" : ""}"
+                     data-path="${escapeAttr(f.path)}" title="${escapeAttr(f.path)}">
+                    <div class="recent-item-content">
+                        <span class="recent-item-name">${escapeHtml(f.name)}</span>
+                    </div>
+                    <div class="recent-item-actions">
+                        <button class="recent-item-delete" type="button" title="Eliminar de recientes">✕</button>
+                        <span class="recent-item-arrow">→</span>
+                    </div>
+                </div>
+            `).join("");
+
+            list.querySelectorAll(".recent-item").forEach((item) => {
+                const deleteBtn = item.querySelector(".recent-item-delete");
+                const path = item.dataset.path;
+
+                // Click en el item = activar archivo
+                item.addEventListener("click", (e) => {
+                    if (e.target !== deleteBtn) {
+                        activateFile(path);
+                    }
+                });
+
+                // Click en el botón delete = eliminar
+                deleteBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    removeRecentFile(path);
+                });
+            });
+
+            clearBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                clearAllRecentFiles();
+            });
+        }
+
+        async function activateFile(filePath) {
+            if (!window.electronExcel) return;
+            try {
+                const result = await window.electronExcel.setSelectedFile(filePath);
+                if (result) {
+                    const recent = getRecentFiles().find((f) => f.path === filePath);
+                    saveRecentFile(filePath, result.fileName || recent?.name || filePath.split(/[\\/]/).pop());
+                    document.getElementById("activeFileName").textContent = result.fileName || filePath.split(/[\\/]/).pop();
+                    renderRecentFiles(filePath);
+                }
+            } catch (err) {
+                alert("No se pudo activar el archivo:\n" + err);
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function escapeAttr(str) {
+            return String(str || "").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            if (!window.electronExcel) return;
+
+            const changeBtn = document.getElementById("changeFileBtn");
+            changeBtn.addEventListener("click", async () => {
+                try {
+                    const result = await window.electronExcel.selectFile();
+                    if (result) {
+                        saveRecentFile(result.filePath, result.fileName);
+                        document.getElementById("activeFileName").textContent = result.fileName;
+                        renderRecentFiles(result.filePath);
+                    }
+                } catch (err) {
+                    alert("Error al seleccionar archivo:\n" + err);
+                }
+            });
+
+            try {
+                const result = await window.electronExcel.getSelectedFile();
+                if (result) {
+                    saveRecentFile(result.filePath, result.fileName);
+                    document.getElementById("activeFileName").textContent = result.fileName;
+                    renderRecentFiles(result.filePath);
+                } else {
+                    document.getElementById("activeFileName").textContent = "Sin archivo seleccionado";
+                    renderRecentFiles(null);
+                }
+            } catch {
+                document.getElementById("activeFileName").textContent = "Sin archivo";
+                renderRecentFiles(null);
+            }
+        });
+    </script>
+</body>
+</html>

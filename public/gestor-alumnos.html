@@ -1,0 +1,1042 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Alumnos - Excel</title>
+    <script src="app-bridge.js"></script>
+    <!-- XLSX - Librería principal -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js" integrity="sha512-UQnhkjV2gIt8VYN8GjJ3xAVDQ7KZ4dKxPm0zw4yNdaWCSxbV9LJfMTXvx9qgHKmCHQCoKkJaAxCp4A9O3cZUg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- XLSX - Librería alternativa por si falla -->
+    <script src="xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f3f6fb;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.25);
+            overflow: hidden;
+        }
+
+        .header {
+            background: #3730a3;
+            color: white;
+            padding: 28px 30px;
+            text-align: left;
+        }
+
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.05em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 35px;
+        }
+
+        .section h2 {
+            color: #6366f1;
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #6366f1;
+        }
+
+        /* ÁREA DE CARGA */
+        .upload-area {
+            border: 3px dashed #6366f1;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            border-color: #4338ca;
+            background: #f0f2ff;
+        }
+
+        .upload-area.dragging {
+            border-color: #4338ca;
+            background: #e8ecff;
+            transform: scale(1.02);
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            font-size: 0.9em;
+            color: #999;
+        }
+
+        /* MENSAJES */
+        .message {
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: none;
+            animation: slideDown 0.3s ease;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        /* TABLA DE ALUMNOS */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        table th {
+            background: #6366f1;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        table tr:hover {
+            background: #f8f9ff;
+        }
+
+        table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .alumno-numero {
+            font-weight: 600;
+            color: #6366f1;
+            width: 50px;
+        }
+
+        /* FORMULARIO DE NUEVO ALUMNO */
+        .form-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        input[type="text"],
+        input[type="date"] {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        input[type="text"]:focus,
+        input[type="date"]:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        button {
+            padding: 12px 25px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button.secondary {
+            background: #f0f0f0;
+            color: #6366f1;
+            border: 2px solid #6366f1;
+        }
+
+        button.secondary:hover {
+            background: #f8f9ff;
+        }
+
+        button.delete {
+            background: #ff6b6b;
+            padding: 6px 12px;
+            font-size: 0.9em;
+            width: 100%;
+        }
+
+        button.delete:hover {
+            background: #ff5252;
+        }
+
+        /* ACCIONES */
+        .actions {
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .actions-left {
+            display: flex;
+            gap: 10px;
+        }
+
+        .actions-right {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* ESTADÍSTICAS */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #6366f1;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card h3 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .number {
+            font-size: 2.2em;
+            font-weight: bold;
+        }
+
+        /* LOADING */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #6366f1;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #6366f1;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* RESPONSIVO */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .form-group {
+                flex-direction: column;
+            }
+
+            input[type="text"],
+            input[type="date"] {
+                min-width: unset;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+
+            .actions-left,
+            .actions-right {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            table {
+                font-size: 0.9em;
+            }
+
+            table td, table th {
+                padding: 8px 10px;
+            }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        .empty-state p {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .empty-state-hint {
+            font-size: 0.9em;
+            color: #bbb;
+        }
+
+        .page-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f8f9ff;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .nav-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .nav-button,
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            width: auto;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.92em;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .nav-button {
+            background: white;
+            color: #6366f1;
+            border: 2px solid #6366f1;
+        }
+
+        .nav-button:hover {
+            background: #f0f2ff;
+            transform: translateY(-1px);
+        }
+
+        .nav-link {
+            background: #6366f1;
+            color: white;
+            border: 2px solid #6366f1;
+        }
+
+        .nav-link:hover {
+            background: #4f46e5;
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 768px) {
+            .page-nav {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .nav-group {
+                width: 100%;
+            }
+
+            .page-nav .nav-button,
+            .page-nav .nav-link {
+                flex: 1;
+                width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="page-nav" aria-label="Navegación">
+            <div class="nav-group">
+                <button class="nav-button" type="button" onclick="window.history.back()">← Atrás</button>
+                <a class="nav-link" href="index.html">⌂ Inicio</a>
+            </div>
+        </nav>
+
+        <div class="header">
+            <h1>👥 Gestor de Alumnos</h1>
+            <p>Carga tu Excel y gestiona fácilmente los datos de alumnos</p>
+        </div>
+
+        <div class="content">
+            <!-- MENSAJES -->
+            <div id="message" class="message"></div>
+
+            <!-- SECCIÓN 1: CARGA DE ARCHIVO -->
+            <div class="section">
+                <h2>1️⃣ Cargar Archivo Excel</h2>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text"><strong>Arrastra tu archivo aquí</strong></div>
+                    <div class="upload-hint">o haz clic para seleccionar</div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+                </div>
+            </div>
+
+            <!-- SECCIÓN 2: ESTADÍSTICAS Y TABLA DE ALUMNOS (inicialmente oculta) -->
+            <div id="mainContent" style="display: none;">
+                <!-- ESTADÍSTICAS -->
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Total de Alumnos</h3>
+                        <div class="number" id="totalAlumnos">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Con Fecha Nacimiento</h3>
+                        <div class="number" id="conFecha">0</div>
+                    </div>
+                </div>
+
+                <!-- TABLA DE ALUMNOS EXISTENTES -->
+                <div class="section">
+                    <h2>2️⃣ Alumnos Actuales</h2>
+                    <div class="table-container">
+                        <table id="alumnosTable">
+                            <thead>
+                                <tr>
+                                    <th>Nº</th>
+                                    <th>Nombre del Alumno</th>
+                                    <th>Fecha de Nacimiento</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alumnosTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="emptyState" class="empty-state" style="display: none;">
+                        <div class="empty-state-icon">📭</div>
+                        <p>No hay alumnos registrados</p>
+                        <div class="empty-state-hint">Agrega el primer alumno a continuación</div>
+                    </div>
+                </div>
+
+                <!-- SECCIÓN 3: AGREGAR NUEVO ALUMNO -->
+                <div class="section">
+                    <h2>3️⃣ Agregar Nuevo Alumno</h2>
+                    <div class="form-group">
+                        <input type="text" id="alumnoNombre" placeholder="Nombre completo del alumno" />
+                        <input type="date" id="alumnoFecha" />
+                        <button onclick="agregarAlumno()">➕ Agregar Alumno</button>
+                    </div>
+                </div>
+
+                <!-- SECCIÓN 4: ACCIONES FINALES -->
+                <div class="section" style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #e0e0e0;">
+                    <div class="actions">
+                        <div class="actions-left">
+                            <button class="secondary" onclick="cargarNuevo()">🔄 Cargar Otro Archivo</button>
+                        </div>
+                        <div class="actions-right">
+                            <button onclick="descargarExcel()">📥 Descargar Excel Actualizado</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOADING -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Procesando archivo...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== VARIABLES GLOBALES =====
+        let workbook = null;
+        let archivoOriginal = null;
+        let xlsxReady = false;
+        const isElectronMode = Boolean(window.electronExcel);
+        let autoSaveTimeout = null;
+        let hayCambiosSinGuardar = false;
+        const AUTO_SAVE_DELAY_MS = 15000;
+
+        // ===== VERIFICACIÓN DE LIBRERÍA XLSX =====
+        function checkXLSX() {
+            if (isElectronMode) {
+                xlsxReady = true;
+                return true;
+            }
+
+            if (typeof XLSX === 'undefined') {
+                mostrarMensaje('⚠️ Cargando librerías... Por favor espera', 'info');
+                return false;
+            }
+            xlsxReady = true;
+            return true;
+        }
+
+        // Verificar que XLSX esté disponible
+        setTimeout(() => {
+            if (!checkXLSX()) {
+                setTimeout(checkXLSX, 500);
+            }
+        }, 100);
+
+        // ===== DRAG & DROP =====
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => {
+            if (isElectronMode) {
+                seleccionarArchivoLocal();
+                return;
+            }
+
+            if (!xlsxReady) {
+                mostrarMensaje('⚠️ Cargando librerías... Por favor espera un momento', 'info');
+                return;
+            }
+            fileInput.click();
+        });
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragging');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragging');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragging');
+            if (isElectronMode) {
+                mostrarMensaje('Usa el selector de archivo para conectar un Excel local.', 'info');
+                return;
+            }
+
+            if (!xlsxReady) {
+                mostrarMensaje('⚠️ Cargando librerías... Por favor espera un momento', 'info');
+                return;
+            }
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                cargarArchivo(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0 && xlsxReady) {
+                cargarArchivo(e.target.files[0]);
+            }
+        });
+
+        // ===== CARGAR ARCHIVO LOCAL EN ELECTRON =====
+        async function seleccionarArchivoLocal() {
+            try {
+                mostrarLoading(true);
+                const result = await window.electronExcel.selectFile();
+
+                if (!result) {
+                    mostrarLoading(false);
+                    return;
+                }
+
+                archivoOriginal = { name: result.fileName, path: result.filePath };
+                workbook = null;
+                hayCambiosSinGuardar = false;
+                limpiarTemporizadorAutoguardado();
+                mostrarTablaAlumnos(result.alumnos);
+                actualizarStats(result.alumnos);
+                document.getElementById('uploadArea').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                mostrarMensaje(`Archivo conectado: ${result.fileName}`, 'success');
+                mostrarLoading(false);
+            } catch (error) {
+                mostrarMensaje('Error al abrir el Excel local: ' + error.message, 'error');
+                mostrarLoading(false);
+            }
+        }
+
+        // ===== CARGAR ARCHIVO =====
+        function cargarArchivo(file) {
+            if (!checkXLSX()) {
+                mostrarMensaje('❌ XLSX no está disponible. Recargando página...', 'error');
+                setTimeout(() => location.reload(), 2000);
+                return;
+            }
+
+            archivoOriginal = file;
+            mostrarLoading(true);
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    workbook = XLSX.read(data, { type: 'array' });
+
+                    // Verificar que tenga la hoja DATOS
+                    if (!workbook.SheetNames.includes('DATOS')) {
+                        mostrarMensaje(
+                            '❌ Error: El archivo no tiene la hoja "DATOS" esperada',
+                            'error'
+                        );
+                        mostrarLoading(false);
+                        return;
+                    }
+
+                    cargarAlumnos();
+                    mostrarMensaje('✅ Archivo cargado exitosamente', 'success');
+                    document.getElementById('uploadArea').style.display = 'none';
+                    document.getElementById('mainContent').style.display = 'block';
+                    mostrarLoading(false);
+
+                } catch (error) {
+                    mostrarMensaje('❌ Error al cargar el archivo: ' + error.message, 'error');
+                    mostrarLoading(false);
+                }
+            };
+
+            reader.onerror = function() {
+                mostrarMensaje('❌ Error al leer el archivo', 'error');
+                mostrarLoading(false);
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ===== CARGAR ALUMNOS DESDE LA HOJA DATOS =====
+        function cargarAlumnos() {
+            const sheet = workbook.Sheets['DATOS'];
+            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+            // Buscar la fila con encabezados (Nº, ALUMNADO, FECHA NAC, EDAD, etc.)
+            let headerRowIdx = -1;
+            let alumnosStart = -1;
+
+            for (let i = 0; i < json.length; i++) {
+                const row = json[i];
+                if (row[1] && String(row[1]).toUpperCase().includes('ALUMNADO')) {
+                    headerRowIdx = i;
+                    alumnosStart = i + 1;
+                    break;
+                }
+            }
+
+            if (headerRowIdx === -1) {
+                mostrarMensaje('⚠️ No se encontraron alumnos en la hoja DATOS', 'error');
+                return;
+            }
+
+            // Extraer alumnos (desde alumnosStart hasta que encuentre una fila vacía en el nombre)
+            const alumnos = [];
+            for (let i = alumnosStart; i < json.length; i++) {
+                const nombre = json[i][1];
+                const fechaNac = json[i][2];
+
+                if (!nombre || String(nombre).trim() === '') {
+                    break; // Fin de la lista de alumnos
+                }
+
+                alumnos.push({
+                    numero: json[i][0] || alumnos.length + 1,
+                    nombre: nombre,
+                    fechaNac: fechaNac,
+                    excelRowIdx: alumnosStart + alumnos.length
+                });
+            }
+
+            // Mostrar tabla
+            mostrarTablaAlumnos(alumnos);
+            actualizarStats(alumnos);
+        }
+
+        // ===== MOSTRAR TABLA DE ALUMNOS =====
+        function mostrarTablaAlumnos(alumnos) {
+            const tbody = document.getElementById('alumnosTableBody');
+            const emptyState = document.getElementById('emptyState');
+
+            if (alumnos.length === 0) {
+                document.getElementById('alumnosTable').style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            document.getElementById('alumnosTable').style.display = 'table';
+            emptyState.style.display = 'none';
+
+            tbody.innerHTML = alumnos.map((alumno, idx) => {
+                const fecha = alumno.fechaNac ? formatearFecha(alumno.fechaNac) : '-';
+                return `
+                    <tr>
+                        <td class="alumno-numero">${alumno.numero}</td>
+                        <td>${alumno.nombre}</td>
+                        <td>${fecha}</td>
+                        <td style="width: 80px;">
+                            <button class="delete" onclick="eliminarAlumno(${idx})">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Guardar alumnos en global para usarlos después
+            window.alumnosActuales = alumnos;
+        }
+
+        // ===== ACTUALIZAR ESTADÍSTICAS =====
+        function actualizarStats(alumnos) {
+            const conFecha = alumnos.filter(a => a.fechaNac).length;
+            document.getElementById('totalAlumnos').textContent = alumnos.length;
+            document.getElementById('conFecha').textContent = conFecha;
+        }
+
+        // ===== AGREGAR ALUMNO =====
+        function agregarAlumno() {
+            const nombre = document.getElementById('alumnoNombre').value.trim();
+            const fecha = document.getElementById('alumnoFecha').value;
+
+            if (!nombre) {
+                mostrarMensaje('❌ Por favor ingresa el nombre del alumno', 'error');
+                return;
+            }
+
+            // Obtener número siguiente
+            const numeroSiguiente = (window.alumnosActuales.length > 0) 
+                ? Math.max(...window.alumnosActuales.map(a => a.numero)) + 1
+                : 1;
+
+            // Agregar a la lista
+            window.alumnosActuales.push({
+                numero: numeroSiguiente,
+                nombre: nombre,
+                fechaNac: fecha || null
+            });
+
+            // Actualizar tabla
+            mostrarTablaAlumnos(window.alumnosActuales);
+            actualizarStats(window.alumnosActuales);
+
+            // Limpiar formulario
+            document.getElementById('alumnoNombre').value = '';
+            document.getElementById('alumnoFecha').value = '';
+
+            mostrarMensaje(`✅ Alumno "${nombre}" agregado exitosamente`, 'success');
+            marcarCambio();
+        }
+
+        // ===== ELIMINAR ALUMNO =====
+        function eliminarAlumno(idx) {
+            const nombre = window.alumnosActuales[idx].nombre;
+            if (confirm(`¿Eliminar a "${nombre}"?`)) {
+                window.alumnosActuales.splice(idx, 1);
+                mostrarTablaAlumnos(window.alumnosActuales);
+                actualizarStats(window.alumnosActuales);
+                mostrarMensaje(`✅ Alumno eliminado`, 'success');
+                marcarCambio();
+            }
+        }
+
+        // ===== DESCARGAR EXCEL =====
+        function descargarExcel() {
+            if (isElectronMode) {
+                guardarExcelLocal();
+                return;
+            }
+
+            if (!workbook) {
+                mostrarMensaje('❌ No hay archivo cargado', 'error');
+                return;
+            }
+
+            mostrarLoading(true);
+
+            try {
+                // Obtener la hoja DATOS
+                const sheet = workbook.Sheets['DATOS'];
+                const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+                // Encontrar la fila de encabezados
+                let headerRowIdx = -1;
+                for (let i = 0; i < json.length; i++) {
+                    const row = json[i];
+                    if (row[1] && String(row[1]).toUpperCase().includes('ALUMNADO')) {
+                        headerRowIdx = i;
+                        break;
+                    }
+                }
+
+                if (headerRowIdx === -1) {
+                    mostrarMensaje('❌ Error: No se encontró la estructura esperada', 'error');
+                    mostrarLoading(false);
+                    return;
+                }
+
+                // Reemplazar datos de alumnos
+                const alumnosStart = headerRowIdx + 1;
+                window.alumnosActuales.forEach((alumno, idx) => {
+                    const rowIdx = alumnosStart + idx;
+                    json[rowIdx] = json[rowIdx] || [];
+                    json[rowIdx][0] = alumno.numero;
+                    json[rowIdx][1] = alumno.nombre;
+                    json[rowIdx][2] = alumno.fechaNac || null;
+                });
+
+                // Limpiar filas sobrantes
+                const ultimaRow = alumnosStart + window.alumnosActuales.length;
+                for (let i = json.length - 1; i >= ultimaRow; i--) {
+                    if (!json[i].some(cell => cell !== null && cell !== undefined && cell !== '')) {
+                        json.pop();
+                    } else {
+                        break;
+                    }
+                }
+
+                // Crear nuevo workbook con datos actualizados
+                const newSheet = XLSX.utils.aoa_to_sheet(json);
+
+                // Copiar estilos y formato del original
+                Object.keys(sheet).forEach(key => {
+                    if (key.startsWith('!')) {
+                        newSheet[key] = sheet[key];
+                    }
+                });
+
+                workbook.Sheets['DATOS'] = newSheet;
+
+                // Descargar
+                const nombreArchivo = archivoOriginal.name || 'plantilla313_actualizado.xlsx';
+                XLSX.writeFile(workbook, nombreArchivo);
+
+                mostrarMensaje(`✅ Archivo "${nombreArchivo}" descargado exitosamente`, 'success');
+                mostrarLoading(false);
+            } catch (error) {
+                mostrarMensaje('❌ Error al descargar: ' + error.message, 'error');
+                mostrarLoading(false);
+            }
+        }
+
+        // ===== CARGAR NUEVO ARCHIVO =====
+        function cargarNuevo() {
+            if (isElectronMode) {
+                seleccionarArchivoLocal();
+            } else {
+                location.reload();
+            }
+        }
+
+        async function guardarExcelLocal() {
+            if (!archivoOriginal) {
+                mostrarMensaje('No hay archivo local seleccionado', 'error');
+                return false;
+            }
+
+            mostrarLoading(true);
+
+            try {
+                const result = await window.electronExcel.saveAlumnos(window.alumnosActuales);
+                mostrarTablaAlumnos(result.alumnos);
+                actualizarStats(result.alumnos);
+                hayCambiosSinGuardar = false;
+                limpiarTemporizadorAutoguardado();
+                mostrarMensaje(`Guardado directamente en: ${result.fileName}`, 'success');
+                mostrarLoading(false);
+                return true;
+            } catch (error) {
+                mostrarMensaje('Error al guardar el Excel local: ' + error.message, 'error');
+                mostrarLoading(false);
+                return false;
+            }
+        }
+
+        function marcarCambio() {
+            hayCambiosSinGuardar = true;
+            limpiarTemporizadorAutoguardado();
+            autoSaveTimeout = setTimeout(() => {
+                guardarCambiosAutomaticamente();
+            }, AUTO_SAVE_DELAY_MS);
+        }
+
+        function limpiarTemporizadorAutoguardado() {
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = null;
+            }
+        }
+
+        async function guardarCambiosAutomaticamente() {
+            if (!hayCambiosSinGuardar || !isElectronMode) {
+                return true;
+            }
+
+            mostrarMensaje('Autoguardando alumnos...', 'info');
+            return guardarExcelLocal();
+        }
+
+        async function guardarCambiosAntesDeCerrar() {
+            if (!hayCambiosSinGuardar || !isElectronMode) {
+                return true;
+            }
+
+            limpiarTemporizadorAutoguardado();
+            mostrarMensaje('Guardando alumnos antes de cerrar...', 'info');
+            return guardarExcelLocal();
+        }
+
+        window.guardarCambiosAntesDeCerrar = guardarCambiosAntesDeCerrar;
+
+        // ===== FUNCIONES AUXILIARES =====
+        function mostrarMensaje(texto, tipo) {
+            const elem = document.getElementById('message');
+            elem.textContent = texto;
+            elem.className = `message show ${tipo}`;
+            setTimeout(() => {
+                elem.classList.remove('show');
+            }, 5000);
+        }
+
+        function mostrarLoading(mostrar) {
+            document.getElementById('loading').style.display = mostrar ? 'block' : 'none';
+        }
+
+        function formatearFecha(fecha) {
+            if (!fecha) return '-';
+            if (typeof fecha === 'number') {
+                // Fecha como número de Excel
+                const date = new Date((fecha - 25569) * 86400 * 1000);
+                return date.toLocaleDateString('es-ES');
+            } else if (fecha instanceof Date) {
+                return fecha.toLocaleDateString('es-ES');
+            } else {
+                return String(fecha);
+            }
+        }
+
+        // Inicializar
+        window.alumnosActuales = [];
+
+        if (isElectronMode) {
+            document.querySelector('.upload-text').innerHTML = '<strong>Selecciona tu Excel local</strong>';
+            document.querySelector('.upload-hint').textContent = 'Puede estar en una carpeta sincronizada de OneDrive';
+            document.querySelector('.actions-right button').textContent = 'Guardar cambios en el Excel';
+        }
+
+        // Verificar carga de XLSX cada 500ms hasta que esté listo
+        const xlsxCheckInterval = setInterval(() => {
+            if (checkXLSX()) {
+                clearInterval(xlsxCheckInterval);
+                mostrarMensaje(isElectronMode ? 'Modo local listo' : '✅ Sistema listo', 'success');
+            }
+        }, 500);
+    </script>
+</body>
+</html>
