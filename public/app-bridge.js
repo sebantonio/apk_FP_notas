@@ -144,6 +144,10 @@
     return XLSX.utils.sheet_to_json(_sheet(name), { defval: "", ...opts });
   }
 
+  function _rows(name) {
+    return XLSX.utils.sheet_to_json(_sheet(name), { header: 1, defval: "" });
+  }
+
   function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
     const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
@@ -161,18 +165,19 @@
     const result = { filePath: _fileName, fileName: _fileName };
 
     try {
-      result.alumnos = XLSX.utils.sheet_to_json(wb.Sheets["DATOS"] || wb.Sheets[wb.SheetNames[0]], { defval: "" });
+      result.alumnos = _getAlumnos();
     } catch { result.alumnos = []; }
 
     try {
-      result.rraa = XLSX.utils.sheet_to_json(wb.Sheets["RRAA"] || {}, { defval: "" });
-    } catch { result.rraa = []; }
-
-    try {
-      result.criterios = XLSX.utils.sheet_to_json(wb.Sheets["Criterios"] || {}, { defval: "" });
-    } catch { result.criterios = []; }
-
-    result.ponderacionesUnidad = [];
+      const rraaCriterios = _getRraaCriterios();
+      result.rraa = rraaCriterios.rraa;
+      result.criterios = rraaCriterios.criterios;
+      result.ponderacionesUnidad = rraaCriterios.ponderacionesUnidad || [];
+    } catch {
+      result.rraa = [];
+      result.criterios = [];
+      result.ponderacionesUnidad = [];
+    }
     return result;
   }
 
@@ -234,51 +239,357 @@
   }
 
   function _getAlumnos() {
-    const rows = _sheetToJson("Alumnos");
-    return rows.map(r => ({
-      nombre: r["Nombre"] || r["nombre"] || "",
-      apellidos: r["Apellidos"] || r["apellidos"] || "",
-      id: r["ID"] || r["id"] || "",
-    })).filter(a => a.nombre || a.apellidos);
+    const rows = _rows("DATOS");
+    const header = rows.findIndex((row) =>
+      row[1] && String(row[1]).toUpperCase().includes("ALUMNADO")
+    );
+    if (header < 0) return [];
+
+    const alumnos = [];
+    for (let rowIdx = header + 1; rowIdx < rows.length; rowIdx += 1) {
+      const row = rows[rowIdx] || [];
+      const nombre = row[1];
+      if (!nombre || String(nombre).trim() === "") break;
+      alumnos.push({
+        numero: row[0] || alumnos.length + 1,
+        nombre,
+        fechaNac: row[2] || "",
+        rowIdx,
+        excelRowIdx: rowIdx,
+      });
+    }
+    return alumnos;
   }
 
   function _getUnidades() {
-    try {
-      const rows = _sheetToJson("Unidades");
-      return rows.map(r => ({
-        numero: r["Numero"] || r["numero"] || r["Nº"] || "",
-        nombre: r["Nombre"] || r["nombre"] || "",
-        evaluacion: r["Evaluacion"] || r["evaluacion"] || r["Evaluación"] || "",
-      })).filter(u => u.nombre);
-    } catch { return []; }
+    const rows = _rows("DATOS");
+    const start = _findMainUnitsStart(rows);
+    if (start < 0) return [];
+
+    const unidades = [];
+    for (let idx = 0; idx < 16; idx += 1) {
+      const row = rows[start + idx] || [];
+      const codigo = String(row[8] || `U${idx + 1}`);
+      const nombre = String(row[9] || "");
+      const evaluacion = String(row[10] || "");
+      const horas = row[11] === undefined || row[11] === null ? "" : String(row[11]);
+      if (codigo || nombre || evaluacion || horas) {
+        unidades.push({
+          codigo,
+          numero: codigo,
+          nombre,
+          evaluacion,
+          horas,
+          label: nombre ? `${codigo} - ${nombre}` : codigo,
+        });
+      }
+    }
+    return unidades;
   }
 
   function _getRraaCriterios() {
-    try {
-      const rraa = _sheetToJson("RRAA").map(r => ({
-        codigo: r["Codigo"] || r["código"] || r["Código"] || "",
-        descripcion: r["Descripcion"] || r["descripción"] || r["Descripción"] || "",
-      })).filter(r => r.codigo);
-      const criterios = _sheetToJson("Criterios").map(r => ({
-        codigo: r["Codigo"] || r["código"] || "",
-        descripcion: r["Descripcion"] || r["descripción"] || "",
-        ra: r["RA"] || r["ra"] || "",
-        peso: r["Peso"] || r["peso"] || 0,
-      })).filter(c => c.codigo);
-      return { rraa, criterios };
-    } catch { return { rraa: [], criterios: [] }; }
+    const datosRows = _rows("DATOS");
+    const pesosRows = _rows("PESOS");
+    const rraa = _readRraa(datosRows);
+    const textos = _extractCriteriaTexts(datosRows);
+    const criterios = _readCriterios(pesosRows, rraa, textos);
+    const ponderacionesUnidad = _readPonderacionesUnidad(pesosRows, criterios);
+    return { fileName: _fileName, filePath: _fileName, rraa, criterios, ponderacionesUnidad };
+  }
+
+  function _findMainUnitsStart(rows) {
+    const header = rows.findIndex((row) =>
+      row[8] &&
+      row[9] &&
+      String(row[9]).toUpperCase().includes("UNIDADES")
+    );
+    return header === -1 ? -1 : header + 1;
+  }
+
+  function _findEvaluationUnitsStart(rows, evaluacion) {
+    const numero = String(evaluacion).replace("ª", "");
+    const header = rows.findIndex((row) =>
+      row[10] &&
+      String(row[10]).toUpperCase().includes("UNIDADES") &&
+      String(row[10]).includes(numero)
+    );
+    return header === -1 ? -1 : header + 1;
+  }
+
+  function _saveUnidadesToDatos(unidades) {
+    const sheet = _sheet("DATOS");
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    const start = _findMainUnitsStart(rows);
+    if (start < 0) throw new Error("No se encontró la tabla principal de unidades en DATOS.");
+
+    const normalizadas = (unidades || []).slice(0, 16);
+    for (let idx = 0; idx < 16; idx += 1) {
+      const rowIdx = start + idx;
+      const unidad = normalizadas[idx] || { codigo: `U${idx + 1}`, nombre: "", evaluacion: "", horas: "" };
+      rows[rowIdx] = rows[rowIdx] || [];
+      rows[rowIdx][8] = unidad.codigo || `U${idx + 1}`;
+      rows[rowIdx][9] = unidad.nombre || "";
+      rows[rowIdx][10] = unidad.evaluacion || "";
+      rows[rowIdx][11] = unidad.horas || "";
+    }
+
+    ["1ª", "2ª", "3ª"].forEach((evaluacion) => {
+      const blockStart = _findEvaluationUnitsStart(rows, evaluacion);
+      if (blockStart < 0) return;
+
+      const filtradas = normalizadas.filter((unidad) => unidad.evaluacion === evaluacion);
+      for (let idx = 0; idx < 16; idx += 1) {
+        const rowIdx = blockStart + idx;
+        const unidad = filtradas[idx];
+        rows[rowIdx] = rows[rowIdx] || [];
+        rows[rowIdx][9] = `U${idx + 1}`;
+        rows[rowIdx][10] = unidad ? unidad.nombre : "";
+        rows[rowIdx][11] = evaluacion;
+      }
+    });
+
+    _wb().Sheets["DATOS"] = _replaceSheetKeepingMeta(sheet, rows);
+  }
+
+  function _readRraa(rows) {
+    const header = rows.findIndex((row) =>
+      row[1] && String(row[1]).toUpperCase().includes("RRAA")
+    );
+    if (header < 0) return [];
+
+    const rraa = [];
+    for (let rowIdx = header + 1; rowIdx < rows.length; rowIdx += 1) {
+      const row = rows[rowIdx] || [];
+      const numero = row[0];
+      const descripcion = row[1];
+      if (!numero || !descripcion || String(descripcion).trim() === "") break;
+      rraa.push({ numero, descripcion });
+    }
+    return rraa;
+  }
+
+  function _isCriteriaCode(value) {
+    return Boolean(value && /^\d+\.[a-z]\)/i.test(String(value).trim()));
+  }
+
+  function _raNumberFromCriteria(value) {
+    const match = String(value || "").match(/^(\d+)/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  function _normalizeCriteriaCode(value) {
+    return String(value || "").trim().replace(/\)$/u, "").toLowerCase();
+  }
+
+  function _extractCriteriaTexts(rows) {
+    const textos = {};
+    rows.forEach((row) => {
+      const codigo = row && row[21];
+      const texto = row && row[22];
+      if (codigo && texto) {
+        textos[_normalizeCriteriaCode(codigo)] = String(texto).trim();
+      }
+    });
+    return textos;
+  }
+
+  function _readCriterios(pesosRows, rraa, textos) {
+    const criterios = [];
+    const headerCriterios = pesosRows[3] || [];
+    const ponderaciones = pesosRows[21] || [];
+
+    for (let colIdx = 0; colIdx < headerCriterios.length; colIdx += 1) {
+      const codigo = headerCriterios[colIdx];
+      if (!_isCriteriaCode(codigo)) continue;
+
+      const raNumero = _raNumberFromCriteria(codigo);
+      const ra = rraa.find(item => Number(item.numero) === raNumero);
+      criterios.push({
+        numero: criterios.length + 1,
+        codigo: String(codigo),
+        nombre: String(codigo),
+        originalCodigo: String(codigo),
+        raNumero,
+        raDescripcion: ra ? ra.descripcion : "",
+        ponderacion: ponderaciones[colIdx] || 0,
+        ponderacionInstituto: ponderaciones[colIdx + 1] || 0,
+        ponderacionEmpresa: ponderaciones[colIdx + 2] || 0,
+        texto: textos[_normalizeCriteriaCode(codigo)] || "",
+        colIdx,
+      });
+    }
+
+    return criterios;
+  }
+
+  function _readPonderacionesUnidad(pesosRows, criterios) {
+    const unidades = [];
+    for (let rowIdx = 5; rowIdx < 21; rowIdx += 1) {
+      const row = pesosRows[rowIdx] || [];
+      const ponderaciones = {};
+      criterios.forEach((criterio) => {
+        ponderaciones[criterio.colIdx] = {
+          ponderacion: row[criterio.colIdx] || 0,
+          ponderacionInstituto: row[criterio.colIdx + 1] || 0,
+          ponderacionEmpresa: row[criterio.colIdx + 2] || 0,
+        };
+      });
+      unidades.push({
+        numero: rowIdx - 4,
+        rowIdx,
+        nombre: row[0] && String(row[0]) !== "0" ? String(row[0]) : "",
+        ponderaciones,
+      });
+    }
+    return unidades;
+  }
+
+  function _replaceSheetKeepingMeta(oldSheet, rows) {
+    const nextSheet = XLSX.utils.aoa_to_sheet(rows);
+    Object.keys(oldSheet || {}).forEach((key) => {
+      if (key.startsWith("!")) nextSheet[key] = oldSheet[key];
+    });
+    return nextSheet;
+  }
+
+  function _saveRraaToDatos(rraa) {
+    const sheet = _sheet("DATOS");
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    const header = rows.findIndex((row) =>
+      row[1] && String(row[1]).toUpperCase().includes("RRAA")
+    );
+    if (header < 0) throw new Error('No se encontró la sección RRAA en la hoja DATOS.');
+
+    const start = header + 1;
+    for (let idx = 0; idx < 40; idx += 1) {
+      const rowIdx = start + idx;
+      rows[rowIdx] = rows[rowIdx] || [];
+      rows[rowIdx][0] = "";
+      rows[rowIdx][1] = "";
+    }
+
+    (rraa || []).forEach((item, idx) => {
+      const rowIdx = start + idx;
+      rows[rowIdx] = rows[rowIdx] || [];
+      rows[rowIdx][0] = item.numero || idx + 1;
+      rows[rowIdx][1] = item.descripcion || "";
+    });
+
+    _wb().Sheets["DATOS"] = _replaceSheetKeepingMeta(sheet, rows);
+  }
+
+  function _saveCriteriosToPesos(criterios, ponderacionesUnidad) {
+    const sheet = _sheet("PESOS");
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+    (criterios || []).forEach((crit) => {
+      const colIdx = Number.isInteger(crit.colIdx) ? crit.colIdx : null;
+      if (colIdx === null || colIdx < 0) return;
+      rows[3] = rows[3] || [];
+      rows[21] = rows[21] || [];
+      rows[3][colIdx] = crit.codigo || crit.nombre || crit.originalCodigo || "";
+      rows[21][colIdx] = crit.ponderacion || 0;
+      rows[21][colIdx + 1] = crit.ponderacionInstituto || 0;
+      rows[21][colIdx + 2] = crit.ponderacionEmpresa || 0;
+    });
+
+    (ponderacionesUnidad || []).forEach((unidad) => {
+      const rowIdx = Number(unidad.rowIdx);
+      if (!Number.isInteger(rowIdx) || rowIdx < 0) return;
+      rows[rowIdx] = rows[rowIdx] || [];
+      Object.entries(unidad.ponderaciones || {}).forEach(([key, values]) => {
+        const colIdx = Number(key);
+        if (!Number.isInteger(colIdx)) return;
+        rows[rowIdx][colIdx] = values.ponderacion || 0;
+        rows[rowIdx][colIdx + 1] = values.ponderacionInstituto || 0;
+        rows[rowIdx][colIdx + 2] = values.ponderacionEmpresa || 0;
+      });
+    });
+
+    _wb().Sheets["PESOS"] = _replaceSheetKeepingMeta(sheet, rows);
   }
 
   function _getNotasActividad({ unidad, tipo, actividad }) {
+    const unidades = _getUnidades();
+    const tipos = _getTiposActividad(unidad);
+    const rraaData = _getRraaCriterios();
+    const hoja = `U${unidad}_${tipo}`;
+    const col = `Act${actividad}`;
+    let rows = [];
+    let notas = [];
+
     try {
-      const hoja = `U${unidad}_${tipo}`;
-      const rows = _sheetToJson(hoja);
-      const col = `Act${actividad}`;
-      return rows.map(r => ({
-        alumno: r["Alumno"] || r["alumno"] || "",
+      rows = _sheetToJson(hoja);
+      notas = rows.map((r, idx) => ({
+        numero: r["Nº"] || r["Numero"] || r["numero"] || idx + 1,
+        nombre: r["Alumno"] || r["ALUMNO"] || r["alumno"] || r["Nombre"] || r["nombre"] || "",
         nota: r[col] !== undefined ? r[col] : "",
+        rowIdx: idx + 1,
+      })).filter(item => item.nombre);
+    } catch {
+      notas = _getAlumnos().map((alumno, idx) => ({
+        numero: alumno.numero || idx + 1,
+        nombre: alumno.nombre,
+        nota: "",
+        rowIdx: alumno.rowIdx,
       }));
-    } catch { return []; }
+    }
+
+    const type = tipos.find(item => item.key === tipo) || tipos[0] || { actividades: [] };
+    const block = (type.actividades || []).find(item => Number(item.numero) === Number(actividad)) || {
+      numero: actividad,
+      nombre: "",
+      incluida: true,
+    };
+
+    return {
+      fileName: _fileName,
+      filePath: _fileName,
+      unidad,
+      tipo,
+      actividad,
+      unidades,
+      tipos,
+      actividades: type.actividades || [],
+      block,
+      notas,
+      rraa: rraaData.rraa,
+      criterios: rraaData.criterios,
+      todasCriterios: rraaData.criterios,
+      ponderacionesUnidad: rraaData.ponderacionesUnidad || [],
+    };
+  }
+
+  function _getTiposActividad(unidad) {
+    const definitions = [
+      { key: "practicas", label: "Practicas" },
+      { key: "memorias", label: "Memorias" },
+      { key: "otros", label: "Otras actividades" },
+      { key: "controles", label: "Controles" },
+    ];
+
+    return definitions.map((definition) => {
+      const hoja = `U${unidad}_${definition.key}`;
+      let actividades = [];
+      try {
+        const header = _rows(hoja)[0] || [];
+        actividades = header
+          .map((value) => {
+            const match = String(value || "").match(/^Act(\d+)/i);
+            return match ? { numero: Number(match[1]), nombre: "", incluida: true } : null;
+          })
+          .filter(Boolean);
+      } catch {
+        actividades = [];
+      }
+      if (!actividades.length) actividades = [{ numero: 1, nombre: "", incluida: true }];
+      return {
+        ...definition,
+        total: actividades.length,
+        incluidas: actividades.filter(item => item.incluida).length,
+        actividades,
+      };
+    });
   }
 
   function _saveNotasActividad({ unidad, tipo, actividad, notas }) {
@@ -309,9 +620,9 @@
     saveUnidades: async (unidades) => {
       const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
-      wb.Sheets["Unidades"] = XLSX.utils.json_to_sheet(unidades);
+      _saveUnidadesToDatos(unidades);
       _downloadWorkbook();
-      return { ok: true };
+      return { ok: true, fileName: _fileName, unidades: _getUnidades() };
     },
 
     getRraaCriterios: async () => {
@@ -324,10 +635,10 @@
         : payloadOrRraa;
       const wb = await _ensureWorkbook();
       if (!wb) throw new Error("Sin archivo");
-      wb.Sheets["RRAA"] = XLSX.utils.json_to_sheet(payload.rraa || []);
-      wb.Sheets["Criterios"] = XLSX.utils.json_to_sheet(payload.criterios || []);
+      _saveRraaToDatos(payload.rraa || []);
+      _saveCriteriosToPesos(payload.criterios || [], payload.ponderacionesUnidad || []);
       _downloadWorkbook();
-      return { ok: true };
+      return { ok: true, ..._getRraaCriterios() };
     },
 
     saveAlumnos: async (alumnos) => {
@@ -335,7 +646,7 @@
       if (!wb) throw new Error("Sin archivo");
       wb.Sheets["Alumnos"] = XLSX.utils.json_to_sheet(alumnos);
       _downloadWorkbook();
-      return { ok: true };
+      return { ok: true, fileName: _fileName, alumnos };
     },
 
     getNotasActividad: async (payload) => {
@@ -344,12 +655,23 @@
     },
     getNotasActividadesTipo: async ({ unidad, tipo }) => {
       await _ensureWorkbook();
-      try { return _sheetToJson(`U${unidad}_${tipo}`); }
-      catch { return []; }
+      const tipos = _getTiposActividad(unidad);
+      const type = tipos.find(item => item.key === tipo) || tipos[0];
+      const actividades = type ? type.actividades : [];
+      const notas = [];
+      for (const actividad of actividades) {
+        notas.push({
+          actividad: actividad.numero,
+          nombre: actividad.nombre || "",
+          notas: _getNotasActividad({ unidad, tipo, actividad: actividad.numero }).notas,
+        });
+      }
+      return { fileName: _fileName, unidad, tipo, tipos, actividades, notas };
     },
     saveNotasActividad: async (payload) => {
       await _ensureWorkbook();
-      return _saveNotasActividad(payload);
+      _saveNotasActividad(payload);
+      return _getNotasActividad(payload);
     },
 
     saveCeNotas: async (payload) => {
