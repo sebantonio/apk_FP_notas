@@ -358,6 +358,7 @@
 
   function _applyPatchesToWorkbook(patches) {
     if (!_workbook || !patches || !patches.length) return;
+    const sheetsModified = new Set();
     for (const p of patches) {
       const ws = _workbook.Sheets[p.sheet];
       if (!ws) continue;
@@ -369,7 +370,9 @@
       } else {
         ws[cellRef] = { v: String(p.v), t: "s" };
       }
+      sheetsModified.add(p.sheet);
     }
+    sheetsModified.forEach((s) => _clearRowsCache(s));
   }
 
   function _recordPatch(sheet, r, c, v) {
