@@ -245,7 +245,7 @@
     if (!_workbook && _sourceBuffer) {
       _workbook = XLSX.read(new Uint8Array(_sourceBuffer), { type: "array", cellDates: true });
       _clearRowsCache();
-      if (_isAndroid()) {
+      if (_isNativeAndroid()) {
         // Restaurar hojas guardadas individualmente (más fiable que patches)
         await _dbSaveSheets({});
         // Aplicar también patches por si acaso
@@ -455,6 +455,10 @@
     return /Android/i.test(navigator.userAgent);
   }
 
+  function _isNativeAndroid() {
+    return _isAndroid() || !!_nativeExcel();
+  }
+
   async function _dbGetPatches() {
     try {
       const db = await _openDb();
@@ -597,7 +601,7 @@
 
   async function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
-    if (_isAndroid()) {
+    if (_isNativeAndroid()) {
       await _flushPatchesAndroid();
       return;
     }
@@ -1151,7 +1155,7 @@
       } else {
         ws[cellRef] = { v: String(v), t: "s" };
       }
-      if (_isAndroid()) _recordPatch(hoja, r, c, v);
+      if (_isNativeAndroid()) _recordPatch(hoja, r, c, v);
     }
 
     const nombreColOffset = _activityNameColOffset(layout.rows, block.filaInicio, colIdx);
@@ -1239,13 +1243,13 @@
     },
 
     getNotasActividad: async (payload) => {
-      if (payload && payload.includeRraa === false && !_isAndroid()) await _ensureSourceBuffer();
+      if (payload && payload.includeRraa === false && !_isNativeAndroid()) await _ensureSourceBuffer();
       else await _ensureWorkbook();
       await _ensureActivityMeta();
       return _getNotasActividad(payload);
     },
     getNotasActividadesTipo: async ({ unidad, tipo }) => {
-      if (_isAndroid()) await _ensureWorkbook();
+      if (_isNativeAndroid()) await _ensureWorkbook();
       else await _ensureSourceBuffer();
       await _ensureActivityMeta();
       const tipos = _getTiposActividad(unidad);
@@ -1318,7 +1322,7 @@
         } else {
           ws[cellRef] = { v: String(v), t: "s" };
         }
-        if (_isAndroid()) _recordPatch(hoja, r, c, v);
+        if (_isNativeAndroid()) _recordPatch(hoja, r, c, v);
       }
 
       // Copiar estructura del bloque plantilla al nuevo lugar
