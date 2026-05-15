@@ -25,6 +25,7 @@ public class ExcelFilePlugin extends Plugin {
   private static final String PREFS_NAME = "excel_file";
   private static final String KEY_URI = "uri";
   private static final String KEY_FILE_NAME = "file_name";
+  private OutputStream writeStream = null;
 
   @PluginMethod
   public void selectFile(PluginCall call) {
@@ -62,7 +63,7 @@ public class ExcelFilePlugin extends Plugin {
 
     String fileName = getDisplayName(uri);
     getPrefs().edit().putString(KEY_URI, uri.toString()).putString(KEY_FILE_NAME, fileName).apply();
-    resolveWithFile(call, uri, fileName);
+    resolveWithInfo(call, uri, fileName);
   }
 
   @PluginMethod
@@ -74,61 +75,118 @@ public class ExcelFilePlugin extends Plugin {
     }
     Uri uri = Uri.parse(uriValue);
     String fileName = getPrefs().getString(KEY_FILE_NAME, getDisplayName(uri));
-    resolveWithFile(call, uri, fileName);
+    resolveWithInfo(call, uri, fileName);
   }
 
   @PluginMethod
-  public void saveFile(PluginCall call) {
-    String base64 = call.getString("base64");
+  public void readFileChunk(PluginCall call) {
     String uriValue = call.getString("uri", getPrefs().getString(KEY_URI, null));
-    if (base64 == null || base64.isEmpty()) {
-      call.reject("No hay datos para guardar.");
-      return;
-    }
+    int offset = call.getInt("offset", 0);
+    int length = call.getInt("length", 262144);
     if (uriValue == null || uriValue.isEmpty()) {
       call.reject("No hay archivo Excel seleccionado.");
       return;
     }
 
     Uri uri = Uri.parse(uriValue);
-    try (OutputStream output = getContext().getContentResolver().openOutputStream(uri, "wt")) {
-      if (output == null) {
-        call.reject("No se pudo abrir el Excel para escritura.");
+    try (InputStream input = getContext().getContentResolver().openInputStream(uri)) {
+      if (input == null) {
+        call.reject("No se pudo abrir el Excel para lectura.");
         return;
       }
-      output.write(Base64.decode(base64, Base64.DEFAULT));
-      output.flush();
+      long skipped = 0;
+      while (skipped < offset) {
+        long step = input.skip(offset - skipped);
+        if (step <= 0) break;
+        skipped += step;
+      }
+      byte[] buffer = new byte[length];
+      int read = input.read(buffer);
       JSObject ret = new JSObject();
-      ret.put("ok", true);
-      ret.put("uri", uri.toString());
-      call.resolve(ret);
-    } catch (Exception ex) {
-      call.reject("No se pudo guardar el Excel: " + ex.getMessage(), ex);
-    }
-  }
-
-  private void resolveWithFile(PluginCall call, Uri uri, String fileName) {
-    try {
-      JSObject ret = new JSObject();
-      ret.put("uri", uri.toString());
-      ret.put("fileName", fileName);
-      ret.put("base64", readBase64(uri));
+      if (read <= 0) {
+        ret.put("base64", "");
+        ret.put("bytesRead", 0);
+        ret.put("eof", true);
+      } else {
+        ret.put("base64", Base64.encodeToString(buffer, 0, read, Base64.NO_WRAP));
+        ret.put("bytesRead", read);
+        ret.put("eof", read < length);
+      }
       call.resolve(ret);
     } catch (Exception ex) {
       call.reject("No se pudo leer el Excel: " + ex.getMessage(), ex);
     }
   }
 
-  private String readBase64(Uri uri) throws Exception {
-    try (InputStream input = getContext().getContentResolver().openInputStream(uri);
-         ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-      if (input == null) throw new IllegalStateException("Entrada de archivo no disponible");
-      byte[] buffer = new byte[1024 * 64];
-      int read;
-      while ((read = input.read(buffer)) != -1) {
-        output.write(buffer, 0, read);
+  @PluginMethod
+  public void beginWrite(PluginCall call) {
+    String uriValue = call.getString("uri", getPrefs().getString(KEY_URI, null));
+    if (uriValue == null || uriValue.isEmpty()) {
+      call.reject("No hay archivo Excel seleccionado.");
+      return;
+    }
+
+    closeWriteStream();
+    try {
+      writeStream = getContext().getContentResolver().openOutputStream(Uri.parse(uriValue), "wt");
+      if (writeStream == null) {
+        call.reject("No se pudo abrir el Excel para escritura.");
+        return;
       }
-      return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
+      JSObject ret = new JSObject();
+      ret.put("ok", true);
+      call.resolve(ret);
+    } catch (Exception ex) {
+      call.reject("No se pudo iniciar la escritura del Excel: " + ex.getMessage(), ex);
+    }
+  }
+
+  @PluginMethod
+  public void writeChunk(PluginCall call) {
+    String base64 = call.getString("base64");
+    if (writeStream == null) {
+      call.reject("No hay una escritura iniciada.");
+      return;
+    }
+    if (base64 == null || base64.isEmpty()) {
+      call.reject("Bloque de datos vacío.");
+      return;
+    }
+
+    try {
+      writeStream.write(Base64.decode(base64, Base64.DEFAULT));
+      JSObject ret = new JSObject();
+      ret.put("ok", true);
+      call.resolve(ret);
+    } catch (Exception ex) {
+      closeWriteStream();
+      call.reject("No se pudo escribir el Excel: " + ex.getMessage(), ex);
+    }
+  }
+
+  @PluginMethod
+  public void finishWrite(PluginCall call) {
+    try {
+      if (writeStream != null) writeStream.flush();
+      closeWriteStream();
+      JSObject ret = new JSObject();
+      ret.put("ok", true);
+      call.resolve(ret);
+    } catch (Exception ex) {
+      closeWriteStream();
+      call.reject("No se pudo cerrar el Excel: " + ex.getMessage(), ex);
+    }
+  }
+
+  private void resolveWithInfo(PluginCall call, Uri uri, String fileName) {
+    try {
+      JSObject ret = new JSObject();
+      ret.put("uri", uri.toString());
+      ret.put("fileName", fileName);
+      ret.put("size", getSize(uri));
+      call.resolve(ret);
+    } catch (Exception ex) {
+      call.reject("No se pudo preparar el Excel: " + ex.getMessage(), ex);
     }
   }
 
@@ -149,5 +207,24 @@ public class ExcelFilePlugin extends Plugin {
 
   private SharedPreferences getPrefs() {
     return getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+  }
+
+  private long getSize(Uri uri) {
+    ContentResolver resolver = getContext().getContentResolver();
+    try (Cursor cursor = resolver.query(uri, null, null, null, null)) {
+      if (cursor != null && cursor.moveToFirst()) {
+        int index = cursor.getColumnIndex(OpenableColumns.SIZE);
+        if (index >= 0) return cursor.getLong(index);
+      }
+    } catch (Exception ignored) {}
+    return -1;
+  }
+
+  private void closeWriteStream() {
+    if (writeStream == null) return;
+    try {
+      writeStream.close();
+    } catch (Exception ignored) {}
+    writeStream = null;
   }
 }

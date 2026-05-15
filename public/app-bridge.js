@@ -67,6 +67,57 @@
     return bytes.buffer;
   }
 
+  function _bytesToBase64(bytes) {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  }
+
+  async function _readNativeBuffer(record) {
+    const nativeExcel = _nativeExcel();
+    if (!nativeExcel || typeof nativeExcel.readFileChunk !== "function") return null;
+    const chunkSize = 256 * 1024;
+    const chunks = [];
+    let total = 0;
+    let offset = 0;
+    while (true) {
+      const chunk = await nativeExcel.readFileChunk({ uri: record.uri, offset, length: chunkSize });
+      const bytes = chunk && chunk.base64 ? new Uint8Array(_base64ToArrayBuffer(chunk.base64)) : new Uint8Array(0);
+      if (bytes.length) {
+        chunks.push(bytes);
+        total += bytes.length;
+        offset += bytes.length;
+      }
+      if (!bytes.length || chunk.eof || (record.size > 0 && offset >= record.size)) break;
+    }
+    const merged = new Uint8Array(total);
+    let pos = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, pos);
+      pos += chunk.length;
+    }
+    return merged.buffer;
+  }
+
+  async function _writeNativeBuffer(nativeExcel, bytes) {
+    if (typeof nativeExcel.beginWrite !== "function" || typeof nativeExcel.writeChunk !== "function" || typeof nativeExcel.finishWrite !== "function") {
+      throw new Error("El guardado nativo por bloques no está disponible.");
+    }
+    const chunkSize = 256 * 1024;
+    await nativeExcel.beginWrite({ uri: _fileUri });
+    try {
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        await nativeExcel.writeChunk({ base64: _bytesToBase64(bytes.subarray(offset, offset + chunkSize)) });
+      }
+      await nativeExcel.finishWrite();
+    } catch (err) {
+      try { await nativeExcel.finishWrite(); } catch {}
+      throw err;
+    }
+  }
+
   function _openDb() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) {
@@ -146,12 +197,13 @@
     if (!nativeExcel || typeof nativeExcel.readSelectedFile !== "function") return false;
     try {
       const record = await nativeExcel.readSelectedFile();
-      if (!record || !record.base64) return false;
+      if (!record || !record.uri) return false;
       _fileName = record.fileName || _fileName;
       _fileUri = record.uri || _fileUri;
       if (_fileName) localStorage.setItem(FILE_KEY, _fileName);
       if (_fileUri) localStorage.setItem(URI_KEY, _fileUri);
-      _sourceBuffer = _base64ToArrayBuffer(record.base64);
+      _sourceBuffer = await _readNativeBuffer(record);
+      if (!_sourceBuffer) return false;
       _workbook = null;
       _clearRowsCache();
       return true;
@@ -538,10 +590,11 @@
   async function _downloadWorkbook() {
     if (!_workbook || !_fileName) return;
     const nativeExcel = _nativeExcel();
-    if (nativeExcel && typeof nativeExcel.saveFile === "function") {
-      const base64 = XLSX.write(_workbook, { bookType: "xlsx", type: "base64" });
-      await nativeExcel.saveFile({ uri: _fileUri, base64 });
-      _sourceBuffer = _base64ToArrayBuffer(base64);
+    if (nativeExcel && _fileUri) {
+      const wbout = XLSX.write(_workbook, { bookType: "xlsx", type: "array" });
+      const bytes = wbout instanceof Uint8Array ? wbout : new Uint8Array(wbout);
+      await _writeNativeBuffer(nativeExcel, bytes);
+      _sourceBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       _pendingPatches = [];
       await _dbSavePatches([]);
       await _dbSaveSheets({});
@@ -589,8 +642,9 @@
     const nativeExcel = _nativeExcel();
     if (nativeExcel && typeof nativeExcel.selectFile === "function") {
       return nativeExcel.selectFile().then(async (record) => {
-        if (!record || record.cancelled || !record.base64) return null;
-        _sourceBuffer = _base64ToArrayBuffer(record.base64);
+        if (!record || record.cancelled || !record.uri) return null;
+        _sourceBuffer = await _readNativeBuffer(record);
+        if (!_sourceBuffer) return null;
         _workbook = null;
         _clearRowsCache();
         _pendingPatches = [];
