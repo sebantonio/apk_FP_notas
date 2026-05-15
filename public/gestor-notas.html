@@ -845,7 +845,7 @@
         let currentCriteriosState = null;
         let autoSaveTimeout = null;
         let hayCambiosSinGuardar = false;
-        const AUTO_SAVE_DELAY_MS = 15000;
+        const AUTO_SAVE_DELAY_MS = 1000;
         const _notasCache = new Map();
 
         const messageBox = document.getElementById("message");
@@ -951,6 +951,18 @@
             });
 
             loadNotas();
+        });
+
+        window.addEventListener("pagehide", () => {
+            if (hayCambiosSinGuardar) {
+                guardarCambiosAntesDeCerrar();
+            }
+        });
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden" && hayCambiosSinGuardar) {
+                guardarCambiosAntesDeCerrar();
+            }
         });
 
         async function loadNotasConGuardado(options = {}) {

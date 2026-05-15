@@ -457,8 +457,12 @@
     return /Android/i.test(navigator.userAgent);
   }
 
+  function _isCapacitorApp() {
+    return !!window.Capacitor || /^capacitor:/i.test(location.protocol);
+  }
+
   function _isNativeAndroid() {
-    return _isAndroid() || !!_nativeExcel();
+    return _isAndroid() || _isCapacitorApp() || !!_nativeExcel();
   }
 
   async function _dbGetPatches() {
@@ -474,7 +478,11 @@
     } catch {}
     try {
       const backup = JSON.parse(localStorage.getItem(LS_PATCHES_KEY) || "[]");
-      if (backup.length > stored.length) return backup;
+      const latest = new Map();
+      for (const patch of [...stored, ...backup]) {
+        latest.set(`${patch.sheet}|${patch.r}|${patch.c}`, patch);
+      }
+      return [...latest.values()];
     } catch {}
     return stored;
   }
@@ -506,7 +514,7 @@
       });
     } catch {}
     try {
-      return { ...JSON.parse(localStorage.getItem(LS_ACTIVITY_META_KEY) || "{}"), ...stored };
+      return { ...stored, ...JSON.parse(localStorage.getItem(LS_ACTIVITY_META_KEY) || "{}") };
     } catch {
       return stored;
     }
