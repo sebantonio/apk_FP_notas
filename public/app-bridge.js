@@ -213,6 +213,22 @@
     }
   }
 
+  async function _loadNativeInfo() {
+    const nativeExcel = _nativeExcel();
+    if (!nativeExcel || typeof nativeExcel.readSelectedFile !== "function") return false;
+    try {
+      const record = await nativeExcel.readSelectedFile();
+      if (!record || !record.uri) return false;
+      _fileName = record.fileName || _fileName;
+      _fileUri = record.uri || _fileUri;
+      if (_fileName) localStorage.setItem(FILE_KEY, _fileName);
+      if (_fileUri) localStorage.setItem(URI_KEY, _fileUri);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function _ensureWorkbook() {
     if (_workbook) return _workbook;
     if (!_sourceBuffer && _loadLegacyStorage()) {
@@ -709,8 +725,7 @@
     if (nativeExcel && typeof nativeExcel.selectFile === "function") {
       return nativeExcel.selectFile().then(async (record) => {
         if (!record || record.cancelled || !record.uri) return null;
-        _sourceBuffer = await _readNativeBuffer(record);
-        if (!_sourceBuffer) return null;
+        _sourceBuffer = null;
         _workbook = null;
         _clearRowsCache();
         _pendingPatches = [];
@@ -1173,13 +1188,22 @@
 
   window.electronExcel = {
     selectFile: () => _openFilePicker(),
-    getSelectedFile: async () => (_fileName && await _ensureSourceBuffer())
-      ? { fileName: _fileName, filePath: _fileName }
-      : null,
-    setSelectedFile: async (filePath) => (_fileName === filePath && await _ensureSourceBuffer())
-      ? { fileName: _fileName, filePath: _fileName }
-      : null,
-    verifyFileExists: async () => !!_workbook || !!(await _dbGet()),
+    getSelectedFile: async () => {
+      if (!_fileName) await _loadNativeInfo();
+      return _fileName ? { fileName: _fileName, filePath: _fileUri || _fileName } : null;
+    },
+    setSelectedFile: async (filePath) => {
+      if (!_fileName) await _loadNativeInfo();
+      return _fileName && (filePath === _fileName || filePath === _fileUri)
+        ? { fileName: _fileName, filePath: _fileUri || _fileName }
+        : null;
+    },
+    verifyFileExists: async (filePath) => {
+      if (_fileUri && (!filePath || filePath === _fileUri)) return true;
+      if (_fileName && (!filePath || filePath === _fileName)) return true;
+      if (await _loadNativeInfo()) return !filePath || filePath === _fileUri || filePath === _fileName;
+      return !!_workbook || !!(await _dbGet());
+    },
 
     getUnidades: async () => {
       await _ensureSourceBuffer();
