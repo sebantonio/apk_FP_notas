@@ -44,7 +44,9 @@ class NativeWorkbook {
     Map<String, byte[]> entries = unzip(bytes);
     List<String> shared = parseSharedStrings(entries.get("xl/sharedStrings.xml"));
     Map<String, String> sheets = parseSheets(entries);
-    return new NativeWorkbook(uri.toString(), store, sheets, shared, bytes);
+    String fileKey = uri.getLastPathSegment();
+    if (fileKey == null || fileKey.isEmpty()) fileKey = uri.toString();
+    return new NativeWorkbook(fileKey, store, sheets, shared, bytes);
   }
 
   private NativeWorkbook(String fileKey, NativeNoteStore store, Map<String, String> sheetEntries, List<String> sharedStrings, byte[] xlsxBytes) {
