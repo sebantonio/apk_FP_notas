@@ -5,6 +5,7 @@ import android.net.Uri;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import android.util.Log;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -17,8 +18,6 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import javax.xml.parsers.DocumentBuilderFactory;
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -46,6 +45,7 @@ class NativeWorkbook {
     Map<String, String> sheets = parseSheets(entries);
     String fileKey = uri.getLastPathSegment();
     if (fileKey == null || fileKey.isEmpty()) fileKey = uri.toString();
+    Log.d("NativeWorkbook", "fileKey=" + fileKey);
     return new NativeWorkbook(fileKey, store, sheets, shared, bytes);
   }
 
@@ -94,21 +94,14 @@ class NativeWorkbook {
     int col = layout.typeCol.containsKey(type.key) ? layout.typeCol.get(type.key) : 0;
     int nameCol = col + nameOffset(unit, block.startRow, col);
     int includedCol = col + 1;
-    store.put(fileKey, unit, block.startRow + 1, nameCol, block.name);
-    store.put(fileKey, unit, block.startRow + 2, includedCol, block.included ? "x" : "");
-    JSONArray patches = new JSONArray();
+    List<String[]> entries = new ArrayList<>();
+    entries.add(new String[]{unit, String.valueOf(block.startRow + 1), String.valueOf(nameCol), block.name});
+    entries.add(new String[]{unit, String.valueOf(block.startRow + 2), String.valueOf(includedCol), block.included ? "x" : ""});
     for (StudentNote note : notes) {
-      store.put(fileKey, unit, note.row, note.col, note.grade);
-      try {
-        JSONObject p = new JSONObject();
-        p.put("sheet", unit);
-        p.put("row", note.row);
-        p.put("col", note.col);
-        p.put("value", note.grade);
-        patches.put(p);
-      } catch (Exception ignored) {}
+      Log.d("NativeWorkbook", "saving note row=" + note.row + " col=" + note.col + " grade=" + note.grade);
+      entries.add(new String[]{unit, String.valueOf(note.row), String.valueOf(note.col), note.grade});
     }
-    store.putMany(fileKey, patches);
+    store.putBatch(fileKey, entries);
     rowsCache.remove(unit);
   }
 
